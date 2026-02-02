@@ -86,6 +86,58 @@ download() {
     fi
 }
 
+# Shell wrapper function to add
+SHELL_FUNC='cokacdir() { command cokacdir "$@" && cd "$(cat ~/.cokacdir/lastdir 2>/dev/null || pwd)"; }'
+
+# Get shell config file
+get_shell_config() {
+    local shell_name
+    shell_name="$(basename "$SHELL")"
+
+    case "$shell_name" in
+        bash)
+            if [ -f "$HOME/.bashrc" ]; then
+                echo "$HOME/.bashrc"
+            elif [ -f "$HOME/.bash_profile" ]; then
+                echo "$HOME/.bash_profile"
+            else
+                echo "$HOME/.bashrc"
+            fi
+            ;;
+        zsh)
+            echo "$HOME/.zshrc"
+            ;;
+        *)
+            echo ""
+            ;;
+    esac
+}
+
+# Setup shell wrapper function
+setup_shell() {
+    local config_file
+    config_file="$(get_shell_config)"
+
+    if [ -z "$config_file" ]; then
+        return
+    fi
+
+    # Check if already configured
+    if [ -f "$config_file" ] && grep -q "cokacdir()" "$config_file"; then
+        return
+    fi
+
+    # Create file if not exists
+    if [ ! -f "$config_file" ]; then
+        touch "$config_file"
+    fi
+
+    # Add function
+    echo "" >> "$config_file"
+    echo "# cokacdir - cd to last directory on exit" >> "$config_file"
+    echo "$SHELL_FUNC" >> "$config_file"
+}
+
 main() {
     # Detect platform
     local os arch
@@ -129,6 +181,9 @@ main() {
         if ! echo "$PATH" | grep -q "$install_dir"; then
             warn "Add to PATH: export PATH=\"$install_dir:\$PATH\""
         fi
+
+        # Setup shell wrapper
+        setup_shell
 
         success "Installed! Run 'cokacdir' to start."
     else

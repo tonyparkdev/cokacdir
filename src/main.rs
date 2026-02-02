@@ -187,6 +187,13 @@ fn main() -> io::Result<()> {
     // Save settings before exit
     app.save_settings();
 
+    // Save last directory for shell cd
+    let last_dir = app.active_panel().path.display().to_string();
+    if let Some(config_dir) = config::Settings::config_dir() {
+        let lastdir_path = config_dir.join("lastdir");
+        let _ = std::fs::write(&lastdir_path, &last_dir);
+    }
+
     // Restore terminal
     disable_raw_mode()?;
     execute!(
@@ -451,7 +458,7 @@ fn handle_dual_panel_input(app: &mut App, code: KeyCode, modifiers: KeyModifiers
 
     match code {
         // Quit
-        KeyCode::Char('0') | KeyCode::Char('q') | KeyCode::Char('Q') => return true,
+        KeyCode::Char('q') | KeyCode::Char('Q') => return true,
 
         // Navigation
         KeyCode::Up => app.move_cursor(-1),
