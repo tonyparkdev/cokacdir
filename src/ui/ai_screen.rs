@@ -691,14 +691,9 @@ Keep responses concise and terminal-friendly.",
                     self.update_streaming_history();
                     has_new_content = true;
                 }
-                StreamMessage::ToolUse { name, input } => {
+                StreamMessage::ToolUse { name, input: _ } => {
                     debug_log(&format!("Processing ToolUse: {}", name));
-                    // Add tool use history item
-                    self.add_to_history(HistoryItem {
-                        item_type: HistoryType::ToolUse,
-                        content: format!("{}\n{}", name, input),
-                    });
-                    has_new_content = true;
+                    // Tool use is not displayed to keep UI clean (JSON input was too verbose)
                 }
                 StreamMessage::ToolResult { content, is_error } => {
                     debug_log(&format!("Processing ToolResult: {} chars, is_error={}", content.len(), is_error));
