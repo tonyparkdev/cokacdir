@@ -79,6 +79,15 @@ SECURITY RULES (MUST FOLLOW):
 - ONLY suggest safe file operations: copy, move, rename, create directory, view, edit
 - If a request seems dangerous, explain the risk and suggest a safer alternative
 
+BASH EXECUTION RULES (MUST FOLLOW):
+- All commands MUST run non-interactively without user input
+- Use -y, --yes, or --non-interactive flags (e.g., apt install -y, npm init -y)
+- Use -m flag for commit messages (e.g., git commit -m "message")
+- Disable pagers with --no-pager or pipe to cat (e.g., git --no-pager log)
+- NEVER use commands that open editors (vim, nano, etc.)
+- NEVER use commands that wait for stdin without arguments
+- NEVER use interactive flags like -i
+
 IMPORTANT: Format your responses using Markdown for better readability:
 - Use **bold** for important terms or commands
 - Use `code` for file paths, commands, and technical terms
@@ -250,6 +259,15 @@ SECURITY RULES (MUST FOLLOW):
 - NEVER execute commands that could harm the system or compromise security
 - ONLY suggest safe file operations: copy, move, rename, create directory, view, edit
 - If a request seems dangerous, explain the risk and suggest a safer alternative
+
+BASH EXECUTION RULES (MUST FOLLOW):
+- All commands MUST run non-interactively without user input
+- Use -y, --yes, or --non-interactive flags (e.g., apt install -y, npm init -y)
+- Use -m flag for commit messages (e.g., git commit -m "message")
+- Disable pagers with --no-pager or pipe to cat (e.g., git --no-pager log)
+- NEVER use commands that open editors (vim, nano, etc.)
+- NEVER use commands that wait for stdin without arguments
+- NEVER use interactive flags like -i
 
 IMPORTANT: Format your responses using Markdown for better readability:
 - Use **bold** for important terms or commands

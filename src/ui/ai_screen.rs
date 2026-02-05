@@ -691,9 +691,21 @@ Keep responses concise and terminal-friendly.",
                     self.update_streaming_history();
                     has_new_content = true;
                 }
-                StreamMessage::ToolUse { name, input: _ } => {
+                StreamMessage::ToolUse { name, input } => {
                     debug_log(&format!("Processing ToolUse: {}", name));
-                    // Tool use is not displayed to keep UI clean (JSON input was too verbose)
+                    // Only display Bash commands (other tools are hidden to keep UI clean)
+                    if name == "Bash" {
+                        // Extract command from JSON input
+                        let command = serde_json::from_str::<serde_json::Value>(&input)
+                            .ok()
+                            .and_then(|v| v.get("command").and_then(|c| c.as_str()).map(String::from))
+                            .unwrap_or_else(|| input.clone());
+                        self.add_to_history(HistoryItem {
+                            item_type: HistoryType::ToolUse,
+                            content: format!("{}\n{}", name, command),
+                        });
+                        has_new_content = true;
+                    }
                 }
                 StreamMessage::ToolResult { content, is_error } => {
                     debug_log(&format!("Processing ToolResult: {} chars, is_error={}", content.len(), is_error));
