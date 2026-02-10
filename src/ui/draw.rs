@@ -20,6 +20,8 @@ use super::{
     image_viewer,
     search_result,
     help,
+    diff_screen,
+    diff_file_view,
     theme::Theme,
 };
 
@@ -90,6 +92,16 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         Screen::SearchResult => {
             search_result::draw(frame, &mut app.search_result_state, area, &theme);
         }
+        Screen::DiffScreen => {
+            if let Some(ref mut state) = app.diff_state {
+                diff_screen::draw(frame, state, area, &theme);
+            }
+        }
+        Screen::DiffFileView => {
+            if let Some(ref mut state) = app.diff_file_view_state {
+                diff_file_view::draw(frame, state, area, &theme);
+            }
+        }
     }
 
     // Draw advanced search dialog overlay if active
@@ -136,6 +148,7 @@ fn draw_panels(frame: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
     let has_dialog = app.dialog.is_some();
     let active_idx = app.active_panel_index;
     let ai_panel_index = app.ai_panel_index;
+    let diff_first_panel = app.diff_first_panel;
 
     // 각 패널을 루프로 렌더링
     for i in 0..num_panels {
@@ -149,12 +162,14 @@ fn draw_panels(frame: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
             let path_str = app.panels[i].path.display().to_string();
             let bookmarked = app.settings.bookmarked_path.contains(&path_str);
             let focused = active_idx == i && !has_dialog && (!is_ai_mode || ai_panel_index != Some(i));
+            let diff_selected = diff_first_panel == Some(i);
             panel::draw(
                 frame,
                 &mut app.panels[i],
                 panel_chunks[i],
                 focused,
                 bookmarked,
+                diff_selected,
                 theme,
             );
         }
@@ -256,6 +271,7 @@ fn draw_function_bar(frame: &mut Frame, app: &App, area: Rect, theme: &Theme) {
         ("1", "hom "),
         ("2", "ref "),
         ("'", "mrk "),
+        ("8", "diff "),
         ("0", "+pan "),
         ("9", "-pan "),
     ];

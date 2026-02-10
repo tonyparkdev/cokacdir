@@ -15,3 +15,5 @@ pub mod syntax;
 pub mod image_viewer;
 pub mod search_result;
 pub mod help;
+pub mod diff_screen;
+pub mod diff_file_view;

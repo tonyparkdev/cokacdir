@@ -312,7 +312,7 @@ pub fn draw_dialog(frame: &mut Frame, app: &App, dialog: &Dialog, area: Rect, th
             (60, 15, 15) // Exclude confirm dialog
         }
         DialogType::Settings => {
-            (42, 5, 5) // Settings dialog: width=42, height=5
+            (42, 6, 6) // Settings dialog: width=42, height=6
         }
         DialogType::BinaryFileHandler => {
             // Dynamic height based on input display width
@@ -3348,20 +3348,48 @@ fn handle_settings_dialog_input(app: &mut App, code: KeyCode) -> bool {
         KeyCode::Enter => {
             app.apply_settings_from_dialog();
         }
+        KeyCode::Up => {
+            if let Some(ref mut state) = app.settings_state {
+                if state.selected_field > 0 {
+                    state.selected_field -= 1;
+                }
+            }
+        }
+        KeyCode::Down => {
+            if let Some(ref mut state) = app.settings_state {
+                if state.selected_field < 1 {
+                    state.selected_field += 1;
+                }
+            }
+        }
         KeyCode::Left => {
             if let Some(ref mut state) = app.settings_state {
-                state.prev_theme();
-                // Apply theme immediately for preview
-                let theme_name = state.current_theme();
-                app.theme = crate::ui::theme::Theme::load(theme_name);
+                match state.selected_field {
+                    0 => {
+                        state.prev_theme();
+                        let theme_name = state.current_theme();
+                        app.theme = crate::ui::theme::Theme::load(theme_name);
+                    }
+                    1 => {
+                        state.prev_diff_method();
+                    }
+                    _ => {}
+                }
             }
         }
         KeyCode::Right | KeyCode::Char(' ') => {
             if let Some(ref mut state) = app.settings_state {
-                state.next_theme();
-                // Apply theme immediately for preview
-                let theme_name = state.current_theme();
-                app.theme = crate::ui::theme::Theme::load(theme_name);
+                match state.selected_field {
+                    0 => {
+                        state.next_theme();
+                        let theme_name = state.current_theme();
+                        app.theme = crate::ui::theme::Theme::load(theme_name);
+                    }
+                    1 => {
+                        state.next_diff_method();
+                    }
+                    _ => {}
+                }
             }
         }
         _ => {}
@@ -3527,13 +3555,26 @@ fn draw_settings_dialog(frame: &mut Frame, state: &SettingsState, area: Rect, th
 
     let mut lines: Vec<Line> = Vec::new();
 
-    // Theme setting
+    // Theme setting (row 0)
     let theme_value = format!("< {} >", state.current_theme());
+    let theme_prompt = if state.selected_field == 0 { "> " } else { "  " };
     lines.push(Line::from(vec![
-        Span::styled("> ", Style::default().fg(theme.settings.prompt)),
+        Span::styled(theme_prompt, Style::default().fg(theme.settings.prompt)),
         Span::styled("Theme: ", Style::default().fg(theme.settings.label_text)),
         Span::styled(
             theme_value,
+            Style::default().fg(theme.settings.value_text).bg(theme.settings.value_bg),
+        ),
+    ]));
+
+    // Diff compare method setting (row 1)
+    let diff_value = format!("< {} >", state.current_diff_method());
+    let diff_prompt = if state.selected_field == 1 { "> " } else { "  " };
+    lines.push(Line::from(vec![
+        Span::styled(diff_prompt, Style::default().fg(theme.settings.prompt)),
+        Span::styled("Diff:  ", Style::default().fg(theme.settings.label_text)),
+        Span::styled(
+            diff_value,
             Style::default().fg(theme.settings.value_text).bg(theme.settings.value_bg),
         ),
     ]));
@@ -3542,6 +3583,8 @@ fn draw_settings_dialog(frame: &mut Frame, state: &SettingsState, area: Rect, th
 
     // Help line
     lines.push(Line::from(vec![
+        Span::styled("↑↓", Style::default().fg(theme.settings.help_key)),
+        Span::styled(" Row  ", Style::default().fg(theme.settings.help_text)),
         Span::styled("←→/Space", Style::default().fg(theme.settings.help_key)),
         Span::styled(" Change  ", Style::default().fg(theme.settings.help_text)),
         Span::styled("Enter", Style::default().fg(theme.settings.help_key)),

@@ -24,6 +24,10 @@ fn default_sort_order() -> String {
     "asc".to_string()
 }
 
+fn default_diff_compare_method() -> String {
+    "content".to_string()
+}
+
 impl Default for PanelSettings {
     fn default() -> Self {
         Self {
@@ -75,6 +79,9 @@ pub struct Settings {
     /// Active panel index
     #[serde(default)]
     pub active_panel_index: usize,
+    /// DIFF compare method: "content", "modified_time", "content_and_time"
+    #[serde(default = "default_diff_compare_method")]
+    pub diff_compare_method: String,
 }
 
 impl Default for Settings {
@@ -112,6 +119,7 @@ impl Default for Settings {
             bookmarked_path: Vec::new(),
             panels: vec![PanelSettings::default(), PanelSettings::default()],
             active_panel_index: 0,
+            diff_compare_method: default_diff_compare_method(),
         }
     }
 }
@@ -168,8 +176,8 @@ impl Settings {
                 let _ = fs::write(&dark_theme_path, Theme::dark().to_json());
             }
 
-            // Create default "dawn of coding.json" if not exists
-            let dawn_theme_path = themes_dir.join("dawn of coding.json");
+            // Create default "dawn_of_coding.json" if not exists
+            let dawn_theme_path = themes_dir.join("dawn_of_coding.json");
             if !dawn_theme_path.exists() {
                 let _ = fs::write(&dawn_theme_path, Theme::dawn_of_coding().to_json());
             }

@@ -10,7 +10,7 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 use super::{app::{PanelState, SortBy, SortOrder}, theme::Theme};
 use crate::utils::format::format_size;
 
-pub fn draw(frame: &mut Frame, panel: &mut PanelState, area: Rect, is_active: bool, is_bookmarked: bool, theme: &Theme) {
+pub fn draw(frame: &mut Frame, panel: &mut PanelState, area: Rect, is_active: bool, is_bookmarked: bool, diff_selected: bool, theme: &Theme) {
     let inner_width = area.width.saturating_sub(2) as usize;
 
     // Build path display (truncate if too long, using display width)
@@ -46,7 +46,15 @@ pub fn draw(frame: &mut Frame, panel: &mut PanelState, area: Rect, is_active: bo
             Style::default().fg(theme.panel.file_text)
         })
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(if is_active { theme.panel.border_active } else { theme.panel.border }));
+        .border_style(Style::default().fg(
+            if diff_selected {
+                theme.diff.panel_selected_border
+            } else if is_active {
+                theme.panel.border_active
+            } else {
+                theme.panel.border
+            }
+        ));
 
     let inner = block.inner(area);
     frame.render_widget(block, area);

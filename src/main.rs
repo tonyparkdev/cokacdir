@@ -374,17 +374,19 @@ fn run_app<B: ratatui::backend::Backend>(
 
         terminal.draw(|f| ui::draw::draw(f, app))?;
 
-        // For AI screen, FileInfo with calculation, ImageViewer loading, or file operation progress, use fast polling
+        // For AI screen, FileInfo with calculation, ImageViewer loading, diff comparing, or file operation progress, use fast polling
         let is_file_info_calculating = app.current_screen == Screen::FileInfo
             && app.file_info_state.as_ref().map(|s| s.is_calculating).unwrap_or(false);
         let is_image_loading = app.current_screen == Screen::ImageViewer
             && app.image_viewer_state.as_ref().map(|s| s.is_loading).unwrap_or(false);
+        let is_diff_comparing = app.current_screen == Screen::DiffScreen
+            && app.diff_state.as_ref().map(|s| s.is_comparing).unwrap_or(false);
         let is_progress_active = app.file_operation_progress
             .as_ref()
             .map(|p| p.is_active)
             .unwrap_or(false);
 
-        let poll_timeout = if app.current_screen == Screen::AIScreen || app.is_ai_mode() || is_file_info_calculating || is_image_loading || is_progress_active {
+        let poll_timeout = if app.current_screen == Screen::AIScreen || app.is_ai_mode() || is_file_info_calculating || is_image_loading || is_diff_comparing || is_progress_active {
             Duration::from_millis(100) // Fast polling for spinner animation / progress updates
         } else {
             Duration::from_millis(250)
@@ -411,6 +413,13 @@ fn run_app<B: ratatui::backend::Backend>(
         // Poll for image loading if on ImageViewer screen
         if app.current_screen == Screen::ImageViewer {
             if let Some(ref mut state) = app.image_viewer_state {
+                state.poll();
+            }
+        }
+
+        // Poll for diff comparison progress if on DiffScreen
+        if app.current_screen == Screen::DiffScreen {
+            if let Some(ref mut state) = app.diff_state {
                 state.poll();
             }
         }
@@ -569,6 +578,12 @@ fn run_app<B: ratatui::backend::Backend>(
                                 }
                             }
                         }
+                        Screen::DiffScreen => {
+                            ui::diff_screen::handle_input(app, key.code, key.modifiers);
+                        }
+                        Screen::DiffFileView => {
+                            ui::diff_file_view::handle_input(app, key.code, key.modifiers);
+                        }
                     }
                 }
                 Event::Paste(text) => {
@@ -707,8 +722,15 @@ fn handle_panel_input(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> 
         // Enter - open directory or file
         KeyCode::Enter => app.enter_selected(),
 
-        // Escape - go to parent directory
-        KeyCode::Esc => app.go_to_parent(),
+        // Escape - cancel diff selection or go to parent directory
+        KeyCode::Esc => {
+            if app.diff_first_panel.is_some() {
+                app.diff_first_panel = None;
+                app.show_message("Diff cancelled");
+            } else {
+                app.go_to_parent();
+            }
+        }
 
         // Space - select/deselect file
         KeyCode::Char(' ') => app.toggle_selection(),
@@ -740,6 +762,7 @@ fn handle_panel_input(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> 
         KeyCode::Char('0') => app.add_panel(),
         KeyCode::Char('1') => app.goto_home(),
         KeyCode::Char('2') => app.refresh_panels(),
+        KeyCode::Char('8') => app.start_diff(),
         KeyCode::Char('9') => app.close_panel(),
 
         // AI screen - '.'

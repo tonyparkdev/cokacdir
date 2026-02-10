@@ -2,7 +2,7 @@ use ratatui::style::{Color, Modifier, Style};
 use supports_color::Stream;
 
 /// Default theme name used throughout the application
-pub const DEFAULT_THEME_NAME: &str = "dawn of coding";
+pub const DEFAULT_THEME_NAME: &str = "dawn_of_coding";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 아이콘 문자
@@ -522,6 +522,74 @@ pub struct AdvancedSearchColors {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// DIFF 화면 색상
+// ═══════════════════════════════════════════════════════════════════════════════
+
+#[derive(Clone, Copy)]
+pub struct DiffColors {
+    pub bg: Color,
+    pub border: Color,
+    pub header_text: Color,
+    pub header_label: Color,
+    pub column_header_bg: Color,
+    pub column_header_text: Color,
+    pub same_text: Color,
+    pub modified_text: Color,
+    pub modified_bg: Color,
+    pub left_only_text: Color,
+    pub left_only_bg: Color,
+    pub right_only_text: Color,
+    pub right_only_bg: Color,
+    pub empty_bg: Color,
+    pub dir_same_text: Color,
+    pub dir_modified_text: Color,
+    pub cursor_bg: Color,
+    pub cursor_text: Color,
+    pub marked_text: Color,
+    pub size_text: Color,
+    pub date_text: Color,
+    pub status_bar_bg: Color,
+    pub status_bar_text: Color,
+    pub filter_label: Color,
+    pub stats_text: Color,
+    pub footer_key: Color,
+    pub footer_text: Color,
+    pub panel_selected_border: Color,
+    pub progress_spinner: Color,
+    pub progress_bar_fill: Color,
+    pub progress_bar_empty: Color,
+    pub progress_percent_text: Color,
+    pub progress_value_text: Color,
+    pub progress_hint_text: Color,
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DIFF 파일 내용 비교 색상
+// ═══════════════════════════════════════════════════════════════════════════════
+
+#[derive(Clone, Copy)]
+pub struct DiffFileViewColors {
+    pub bg: Color,
+    pub border: Color,
+    pub header_text: Color,
+    pub line_number: Color,
+    pub same_text: Color,
+    pub modified_text: Color,
+    pub modified_bg: Color,
+    pub left_only_text: Color,
+    pub left_only_bg: Color,
+    pub right_only_text: Color,
+    pub right_only_bg: Color,
+    pub empty_bg: Color,
+    pub inline_change_bg: Color,
+    pub inline_change_text: Color,
+    pub status_bar_bg: Color,
+    pub status_bar_text: Color,
+    pub footer_key: Color,
+    pub footer_text: Color,
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // 메인 Theme 구조체
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -554,6 +622,8 @@ pub struct Theme {
     pub file_info: FileInfoColors,
     pub help: HelpColors,
     pub advanced_search: AdvancedSearchColors,
+    pub diff: DiffColors,
+    pub diff_file_view: DiffFileViewColors,
 
     // 아이콘 문자
     pub chars: ThemeChars,
@@ -577,7 +647,7 @@ impl Theme {
         match name {
             "light" => Self::light(),
             "dark" => Self::dark(),
-            "dawn of coding" => Self::dawn_of_coding(),
+            "dawn_of_coding" => Self::dawn_of_coding(),
             _ => Self::dawn_of_coding(),
         }
     }
@@ -1005,6 +1075,64 @@ impl Theme {
             footer_text: Color::Indexed(251),
         };
 
+        let diff = DiffColors {
+            bg: Color::Indexed(255),
+            border: Color::Indexed(249),
+            header_text: Color::Indexed(238),
+            header_label: Color::Indexed(67),
+            column_header_bg: Color::Indexed(254),
+            column_header_text: Color::Indexed(238),
+            same_text: Color::Indexed(243),
+            modified_text: Color::Indexed(167),
+            modified_bg: Color::Indexed(224),
+            left_only_text: Color::Indexed(25),
+            left_only_bg: Color::Indexed(153),
+            right_only_text: Color::Indexed(25),
+            right_only_bg: Color::Indexed(153),
+            empty_bg: Color::Indexed(254),
+            dir_same_text: Color::Indexed(67),
+            dir_modified_text: Color::Indexed(167),
+            cursor_bg: Color::Indexed(67),
+            cursor_text: Color::Indexed(231),
+            marked_text: Color::Indexed(198),
+            size_text: Color::Indexed(251),
+            date_text: Color::Indexed(251),
+            status_bar_bg: Color::Indexed(253),
+            status_bar_text: Color::Indexed(243),
+            filter_label: Color::Indexed(67),
+            stats_text: Color::Indexed(243),
+            footer_key: Color::Indexed(74),
+            footer_text: Color::Indexed(251),
+            panel_selected_border: Color::Indexed(198),
+            progress_spinner: Color::Indexed(67),
+            progress_bar_fill: Color::Indexed(67),
+            progress_bar_empty: Color::Indexed(251),
+            progress_percent_text: Color::Indexed(243),
+            progress_value_text: Color::Indexed(243),
+            progress_hint_text: Color::Indexed(251),
+        };
+
+        let diff_file_view = DiffFileViewColors {
+            bg: Color::Indexed(255),
+            border: Color::Indexed(238),
+            header_text: Color::Indexed(238),
+            line_number: Color::Indexed(251),
+            same_text: Color::Indexed(243),
+            modified_text: Color::Indexed(124),
+            modified_bg: Color::Indexed(224),
+            left_only_text: Color::Indexed(19),
+            left_only_bg: Color::Indexed(153),
+            right_only_text: Color::Indexed(19),
+            right_only_bg: Color::Indexed(153),
+            empty_bg: Color::Indexed(254),
+            inline_change_bg: Color::Indexed(217),
+            inline_change_text: Color::Indexed(124),
+            status_bar_bg: Color::Indexed(253),
+            status_bar_text: Color::Indexed(243),
+            footer_key: Color::Indexed(74),
+            footer_text: Color::Indexed(251),
+        };
+
         Self {
             palette,
             state,
@@ -1027,6 +1155,8 @@ impl Theme {
             file_info,
             help,
             advanced_search,
+            diff,
+            diff_file_view,
             chars: ThemeChars::default(),
         }
     }
@@ -1370,6 +1500,64 @@ impl Theme {
             footer_text: Color::Indexed(245),
         };
 
+        let diff = DiffColors {
+            bg: Color::Indexed(235),
+            border: Color::Indexed(245),
+            header_text: Color::Indexed(252),
+            header_label: Color::Indexed(117),
+            column_header_bg: Color::Indexed(236),
+            column_header_text: Color::Indexed(252),
+            same_text: Color::Indexed(252),
+            modified_text: Color::Indexed(209),
+            modified_bg: Color::Indexed(52),
+            left_only_text: Color::Indexed(81),
+            left_only_bg: Color::Indexed(23),
+            right_only_text: Color::Indexed(81),
+            right_only_bg: Color::Indexed(23),
+            empty_bg: Color::Indexed(236),
+            dir_same_text: Color::Indexed(117),
+            dir_modified_text: Color::Indexed(209),
+            cursor_bg: Color::Indexed(240),
+            cursor_text: Color::Indexed(255),
+            marked_text: Color::Indexed(204),
+            size_text: Color::Indexed(245),
+            date_text: Color::Indexed(245),
+            status_bar_bg: Color::Indexed(237),
+            status_bar_text: Color::Indexed(252),
+            filter_label: Color::Indexed(117),
+            stats_text: Color::Indexed(252),
+            footer_key: Color::Indexed(117),
+            footer_text: Color::Indexed(245),
+            panel_selected_border: Color::Indexed(204),
+            progress_spinner: Color::Indexed(117),
+            progress_bar_fill: Color::Indexed(117),
+            progress_bar_empty: Color::Indexed(245),
+            progress_percent_text: Color::Indexed(252),
+            progress_value_text: Color::Indexed(252),
+            progress_hint_text: Color::Indexed(245),
+        };
+
+        let diff_file_view = DiffFileViewColors {
+            bg: Color::Indexed(235),
+            border: Color::Indexed(252),
+            header_text: Color::Indexed(252),
+            line_number: Color::Indexed(245),
+            same_text: Color::Indexed(252),
+            modified_text: Color::Indexed(209),
+            modified_bg: Color::Indexed(52),
+            left_only_text: Color::Indexed(81),
+            left_only_bg: Color::Indexed(23),
+            right_only_text: Color::Indexed(81),
+            right_only_bg: Color::Indexed(23),
+            empty_bg: Color::Indexed(236),
+            inline_change_bg: Color::Indexed(88),
+            inline_change_text: Color::Indexed(209),
+            status_bar_bg: Color::Indexed(237),
+            status_bar_text: Color::Indexed(252),
+            footer_key: Color::Indexed(117),
+            footer_text: Color::Indexed(245),
+        };
+
         Self {
             palette,
             state,
@@ -1392,6 +1580,8 @@ impl Theme {
             file_info,
             help,
             advanced_search,
+            diff,
+            diff_file_view,
             chars: ThemeChars::default(),
         }
     }
@@ -1727,6 +1917,64 @@ impl Theme {
             footer_text: Color::Indexed(102),
         };
 
+        let diff = DiffColors {
+            bg: Color::Indexed(234),
+            border: Color::Indexed(102),
+            header_text: Color::Indexed(188),
+            header_label: Color::Indexed(146),
+            column_header_bg: Color::Indexed(235),
+            column_header_text: Color::Indexed(188),
+            same_text: Color::Indexed(188),
+            modified_text: Color::Indexed(174),
+            modified_bg: Color::Indexed(95),
+            left_only_text: Color::Indexed(73),
+            left_only_bg: Color::Indexed(23),
+            right_only_text: Color::Indexed(73),
+            right_only_bg: Color::Indexed(23),
+            empty_bg: Color::Indexed(235),
+            dir_same_text: Color::Indexed(110),
+            dir_modified_text: Color::Indexed(174),
+            cursor_bg: Color::Indexed(60),
+            cursor_text: Color::Indexed(195),
+            marked_text: Color::Indexed(174),
+            size_text: Color::Indexed(102),
+            date_text: Color::Indexed(102),
+            status_bar_bg: Color::Indexed(235),
+            status_bar_text: Color::Indexed(188),
+            filter_label: Color::Indexed(146),
+            stats_text: Color::Indexed(188),
+            footer_key: Color::Indexed(146),
+            footer_text: Color::Indexed(102),
+            panel_selected_border: Color::Indexed(174),
+            progress_spinner: Color::Indexed(146),
+            progress_bar_fill: Color::Indexed(146),
+            progress_bar_empty: Color::Indexed(102),
+            progress_percent_text: Color::Indexed(188),
+            progress_value_text: Color::Indexed(188),
+            progress_hint_text: Color::Indexed(102),
+        };
+
+        let diff_file_view = DiffFileViewColors {
+            bg: Color::Indexed(234),
+            border: Color::Indexed(146),
+            header_text: Color::Indexed(188),
+            line_number: Color::Indexed(239),
+            same_text: Color::Indexed(188),
+            modified_text: Color::Indexed(217),
+            modified_bg: Color::Indexed(95),
+            left_only_text: Color::Indexed(116),
+            left_only_bg: Color::Indexed(23),
+            right_only_text: Color::Indexed(116),
+            right_only_bg: Color::Indexed(23),
+            empty_bg: Color::Indexed(235),
+            inline_change_bg: Color::Indexed(132),
+            inline_change_text: Color::Indexed(217),
+            status_bar_bg: Color::Indexed(235),
+            status_bar_text: Color::Indexed(188),
+            footer_key: Color::Indexed(146),
+            footer_text: Color::Indexed(102),
+        };
+
         Self {
             palette,
             state,
@@ -1749,6 +1997,8 @@ impl Theme {
             file_info,
             help,
             advanced_search,
+            diff,
+            diff_file_view,
             chars: ThemeChars::default(),
         }
     }
@@ -1845,7 +2095,7 @@ impl Theme {
 
         // dawn of coding: bg=234, accent=110, shortcut=146
         if bg == 234 && accent == 110 && shortcut == 146 {
-            "dawn of coding"
+            "dawn_of_coding"
         } else if bg >= 250 {
             "light"
         } else {
@@ -1879,7 +2129,7 @@ impl Theme {
     "shortcut": {},
     "__positive__": "긍정/성공 상태 색상. 작업 완료, 체크마크, 진행바 채움 등에 사용. state.success와 동일하거나 유사. system_info.bar_fill, advanced_search.checkbox_checked 등에서 참조",
     "positive": {},
-    "__highlight__": "강조/경고 색상. 마킹된 파일, 검색 매치, 주의가 필요한 상태 표시. panel.marked_text, editor.match_bg, search_result.match_highlight 등에서 참조. bg 위에서 즉시 눈에 띄어야 함"
+    "__highlight__": "강조/경고 색상. 마킹된 파일, 검색 매치, 주의가 필요한 상태 표시. panel.marked_text, editor.match_bg, search_result.match_highlight 등에서 참조. bg 위에서 즉시 눈에 띄어야 함",
     "highlight": {}
   }},
 
@@ -1891,7 +2141,7 @@ impl Theme {
     "warning": {},
     "__error__": "에러 상태 표시. 작업 실패, 파일 접근 오류 등 문제 상황. 일반적으로 빨간색 계열. 사용자가 즉시 인지해야 하는 심각한 상황에 사용",
     "error": {},
-    "__info__": "정보 상태 표시. 일반 알림, 진행 상황 안내 등 중립적 정보. 일반적으로 파란색 계열. palette.accent와 유사하게 설정 가능"
+    "__info__": "정보 상태 표시. 일반 알림, 진행 상황 안내 등 중립적 정보. 일반적으로 파란색 계열. palette.accent와 유사하게 설정 가능",
     "info": {}
   }},
 
@@ -1925,7 +2175,7 @@ impl Theme {
     "marked_text": {},
     "__size_text__": "파일 크기 컬럼의 텍스트 색상. bg 위에 표시됨. file_text보다 낮은 시각적 우선순위. 보조 정보로서 읽을 수 있지만 파일명보다 덜 눈에 띄어야 함. palette.fg_dim 참조",
     "size_text": {},
-    "__date_text__": "수정일 컬럼의 텍스트 색상. bg 위에 표시됨. size_text와 유사한 시각적 우선순위. 보조 정보로서 파일명보다 덜 강조됨. palette.fg_dim 참조"
+    "__date_text__": "수정일 컬럼의 텍스트 색상. bg 위에 표시됨. size_text와 유사한 시각적 우선순위. 보조 정보로서 파일명보다 덜 강조됨. palette.fg_dim 참조",
     "date_text": {}
   }},
 
@@ -1935,7 +2185,7 @@ impl Theme {
     "bg": {},
     "__text__": "헤더의 일반 텍스트 색상. bg 위에 표시되는 부가 정보. title보다 낮은 시각적 우선순위",
     "text": {},
-    "__title__": "앱 제목(CKD) 텍스트 색상. bg 위에 표시되는 앱 브랜드명. text보다 높은 시각적 강조. 앱의 아이덴티티를 나타내는 요소"
+    "__title__": "앱 제목(CKD) 텍스트 색상. bg 위에 표시되는 앱 브랜드명. text보다 높은 시각적 강조. 앱의 아이덴티티를 나타내는 요소",
     "title": {}
   }},
 
@@ -1945,7 +2195,7 @@ impl Theme {
     "bg": {},
     "__text__": "상태바의 주요 정보 텍스트. bg 위에 표시됨. 현재 선택된 파일명, 파일 타입 등 중요 정보. text_dim보다 높은 시각적 우선순위",
     "text": {},
-    "__text_dim__": "상태바의 보조 정보 텍스트. bg 위에 표시됨. 파일 수, 총 용량, 마킹된 파일 수 등 부가 정보. text보다 낮은 시각적 강조. palette.fg_dim 참조"
+    "__text_dim__": "상태바의 보조 정보 텍스트. bg 위에 표시됨. 파일 수, 총 용량, 마킹된 파일 수 등 부가 정보. text보다 낮은 시각적 강조. palette.fg_dim 참조",
     "text_dim": {}
   }},
 
@@ -1955,7 +2205,7 @@ impl Theme {
     "bg": {},
     "__key__": "단축키 텍스트 색상 (F1, F2 등). bg 위에 표시됨. label과 쌍을 이루며 단축키 부분을 강조. label보다 높은 시각적 우선순위로 키를 먼저 인식할 수 있어야 함. palette.shortcut 참조",
     "key": {},
-    "__label__": "단축키 설명 텍스트 (Help, Menu 등). bg 위에 표시됨. key 옆에 위치하여 해당 키의 기능 설명. key보다 낮은 시각적 강조"
+    "__label__": "단축키 설명 텍스트 (Help, Menu 등). bg 위에 표시됨. key 옆에 위치하여 해당 키의 기능 설명. key보다 낮은 시각적 강조",
     "label": {}
   }},
 
@@ -1963,7 +2213,7 @@ impl Theme {
   "message": {{
     "__bg__": "메시지 영역의 배경색. 작업 완료/실패 시 일시적으로 표시되는 알림의 배경. text가 이 위에 표시됨. 기본 UI와 구분되어 메시지임을 인식할 수 있어야 함",
     "bg": {},
-    "__text__": "메시지 텍스트 색상. bg 위에 표시됨. 작업 결과, 에러 메시지 등. 사용자가 즉시 인지해야 하는 정보로 bg와 높은 대비 필요. state.error, state.success 등과 연계 가능"
+    "__text__": "메시지 텍스트 색상. bg 위에 표시됨. 작업 결과, 에러 메시지 등. 사용자가 즉시 인지해야 하는 정보로 bg와 높은 대비 필요. state.error, state.success 등과 연계 가능",
     "text": {}
   }},
 
@@ -2045,7 +2295,7 @@ impl Theme {
     "tar_exclude_button_text": {},
     "__tar_exclude_button_selected_bg__": "압축 제외 다이얼로그의 선택된 버튼 배경. dialog.button_selected_bg와 유사",
     "tar_exclude_button_selected_bg": {},
-    "__tar_exclude_button_selected_text__": "압축 제외 다이얼로그의 선택된 버튼 텍스트. tar_exclude_button_selected_bg 위에 표시됨"
+    "__tar_exclude_button_selected_text__": "압축 제외 다이얼로그의 선택된 버튼 텍스트. tar_exclude_button_selected_bg 위에 표시됨",
     "tar_exclude_button_selected_text": {}
   }},
 
@@ -2063,7 +2313,7 @@ impl Theme {
     "button_text": {},
     "__button_selected_bg__": "선택된 버튼의 배경색. 현재 포커스가 있는 버튼 하이라이트. button_selected_text가 이 위에 표시됨",
     "button_selected_bg": {},
-    "__button_selected_text__": "선택된 버튼의 텍스트. button_selected_bg 위에 표시됨. 현재 선택될 옵션이 명확히 보여야 함"
+    "__button_selected_text__": "선택된 버튼의 텍스트. button_selected_bg 위에 표시됨. 현재 선택될 옵션이 명확히 보여야 함",
     "button_selected_text": {}
   }},
 
@@ -2085,7 +2335,7 @@ impl Theme {
     "value_bg": {},
     "__help_key__": "설정 다이얼로그 하단의 단축키(Enter, Esc 등). bg 위에 표시됨. 사용 가능한 키 안내",
     "help_key": {},
-    "__help_text__": "설정 다이얼로그 하단의 도움말 텍스트. bg 위에 표시됨. help_key의 기능 설명"
+    "__help_text__": "설정 다이얼로그 하단의 도움말 텍스트. bg 위에 표시됨. help_key의 기능 설명",
     "help_text": {}
   }},
 
@@ -2129,7 +2379,7 @@ impl Theme {
     "find_input_text": {},
     "__find_option__": "찾기 옵션(Case sensitive, Whole word)의 비활성 상태 색상. footer_bg 위에 표시됨. find_option_active보다 낮은 시각적 강조. 현재 꺼진 옵션",
     "find_option": {},
-    "__find_option_active__": "찾기 옵션의 활성 상태 색상. footer_bg 위에 표시됨. find_option보다 높은 시각적 강조. 현재 켜진 옵션임을 명확히 표시"
+    "__find_option_active__": "찾기 옵션의 활성 상태 색상. footer_bg 위에 표시됨. find_option보다 높은 시각적 강조. 현재 켜진 옵션임을 명확히 표시",
     "find_option_active": {}
   }},
 
@@ -2159,7 +2409,7 @@ impl Theme {
     "constant": {},
     "__bracket__": "괄호류((), [], {{}}, <> 등). 코드 구조를 정의하는 구분자. operator와 유사하거나 같을 수 있음. editor.bracket_match와 연계",
     "bracket": {},
-    "__normal__": "하이라이팅 규칙에 매칭되지 않는 일반 텍스트. editor.text와 동일하거나 유사. 기본 폴백 색상"
+    "__normal__": "하이라이팅 규칙에 매칭되지 않는 일반 텍스트. editor.text와 동일하거나 유사. 기본 폴백 색상",
     "normal": {}
   }},
 
@@ -2203,7 +2453,7 @@ impl Theme {
     "wrap_indicator": {},
     "__footer_key__": "하단 도움말의 단축키 텍스트. 사용 가능한 키 안내. editor.footer_key와 유사",
     "footer_key": {},
-    "__footer_text__": "하단 도움말의 설명 텍스트. footer_key의 기능 설명"
+    "__footer_text__": "하단 도움말의 설명 텍스트. footer_key의 기능 설명",
     "footer_text": {}
   }},
 
@@ -2231,7 +2481,7 @@ impl Theme {
     "confirm_text": {},
     "__footer_key__": "하단 도움말의 단축키(k:Kill, q:Quit 등). 프로세스 관리에 사용할 수 있는 키 안내",
     "footer_key": {},
-    "__footer_text__": "하단 도움말의 설명 텍스트. footer_key의 기능 설명"
+    "__footer_text__": "하단 도움말의 설명 텍스트. footer_key의 기능 설명",
     "footer_text": {}
   }},
 
@@ -2287,7 +2537,7 @@ impl Theme {
     "tool_result_text": {},
     "__footer_key__": "하단 도움말의 단축키. Enter:Send, Esc:Exit 등",
     "footer_key": {},
-    "__footer_text__": "하단 도움말 설명"
+    "__footer_text__": "하단 도움말 설명",
     "footer_text": {}
   }},
 
@@ -2325,7 +2575,7 @@ impl Theme {
     "selected_text": {},
     "__footer_key__": "하단 도움말의 단축키",
     "footer_key": {},
-    "__footer_text__": "하단 도움말 설명"
+    "__footer_text__": "하단 도움말 설명",
     "footer_text": {}
   }},
 
@@ -2355,7 +2605,7 @@ impl Theme {
     "path_text": {},
     "__footer_key__": "하단 도움말의 단축키(Enter:Open, Esc:Close 등)",
     "footer_key": {},
-    "__footer_text__": "하단 도움말 설명"
+    "__footer_text__": "하단 도움말 설명",
     "footer_text": {}
   }},
 
@@ -2379,7 +2629,7 @@ impl Theme {
     "footer_key": {},
     "__footer_text__": "하단 도움말 설명",
     "footer_text": {},
-    "__footer_separator__": "하단 도움말 항목 구분자(/). footer_key와 footer_text 사이 또는 항목 간 구분"
+    "__footer_separator__": "하단 도움말 항목 구분자(/). footer_key와 footer_text 사이 또는 항목 간 구분",
     "footer_separator": {}
   }},
 
@@ -2415,7 +2665,7 @@ impl Theme {
     "calculating_text": {},
     "__error_text__": "정보 읽기 실패 시 에러 메시지. bg 위에 표시. state.error와 유사",
     "error_text": {},
-    "__hint_text__": "하단 힌트 텍스트('Press any key to close'). bg 위에 표시"
+    "__hint_text__": "하단 힌트 텍스트('Press any key to close'). bg 위에 표시",
     "hint_text": {}
   }},
 
@@ -2437,7 +2687,7 @@ impl Theme {
     "key_highlight": {},
     "__description__": "단축키 설명 텍스트('Open file', 'Copy to clipboard' 등). bg 위에 표시됨. key 옆에 위치하여 해당 키의 기능 설명. key보다 낮은 시각적 강조",
     "description": {},
-    "__hint_text__": "하단 힌트 텍스트('Press any key to close'). bg 위에 표시됨. 창 닫는 방법 안내"
+    "__hint_text__": "하단 힌트 텍스트('Press any key to close'). bg 위에 표시됨. 창 닫는 방법 안내",
     "hint_text": {}
   }},
 
@@ -2469,7 +2719,119 @@ impl Theme {
     "button_selected_text": {},
     "__footer_key__": "하단 도움말의 단축키(Tab:Next field, Enter:Search 등)",
     "footer_key": {},
-    "__footer_text__": "하단 도움말 설명"
+    "__footer_text__": "하단 도움말 설명",
+    "footer_text": {}
+  }},
+
+  "__diff__": "=== Diff 화면: 두 폴더를 재귀적으로 비교하여 차이점을 시각적으로 표시하는 화면 ===",
+  "diff": {{
+    "__bg__": "DIFF 화면 배경색",
+    "bg": {},
+    "__border__": "DIFF 패널 테두리",
+    "border": {},
+    "__header_text__": "DIFF 헤더 경로 텍스트",
+    "header_text": {},
+    "__header_label__": "[DIFF] 라벨 텍스트",
+    "header_label": {},
+    "__column_header_bg__": "컬럼 헤더 배경",
+    "column_header_bg": {},
+    "__column_header_text__": "컬럼 헤더 텍스트",
+    "column_header_text": {},
+    "__same_text__": "동일 파일 텍스트",
+    "same_text": {},
+    "__modified_text__": "변경된 파일 텍스트",
+    "modified_text": {},
+    "__modified_bg__": "변경된 파일 배경",
+    "modified_bg": {},
+    "__left_only_text__": "한쪽에만 존재하는 파일 텍스트 (왼쪽) - right_only_text와 동일한 값을 사용할 것",
+    "left_only_text": {},
+    "__left_only_bg__": "한쪽에만 존재하는 파일 배경 (왼쪽) - right_only_bg와 동일한 값을 사용할 것",
+    "left_only_bg": {},
+    "__right_only_text__": "한쪽에만 존재하는 파일 텍스트 (오른쪽) - left_only_text와 동일한 값을 사용할 것",
+    "right_only_text": {},
+    "__right_only_bg__": "한쪽에만 존재하는 파일 배경 (오른쪽) - left_only_bg와 동일한 값을 사용할 것",
+    "right_only_bg": {},
+    "__empty_bg__": "반대쪽에 없는 항목의 빈칸 배경",
+    "empty_bg": {},
+    "__dir_same_text__": "동일 디렉토리 텍스트",
+    "dir_same_text": {},
+    "__dir_modified_text__": "하위 내용이 다른 디렉토리 텍스트",
+    "dir_modified_text": {},
+    "__cursor_bg__": "커서 bar 배경",
+    "cursor_bg": {},
+    "__cursor_text__": "커서 bar 텍스트",
+    "cursor_text": {},
+    "__marked_text__": "Space로 마킹된 항목 텍스트",
+    "marked_text": {},
+    "__size_text__": "파일 크기 텍스트",
+    "size_text": {},
+    "__date_text__": "수정 날짜 텍스트",
+    "date_text": {},
+    "__status_bar_bg__": "상태 바 배경",
+    "status_bar_bg": {},
+    "__status_bar_text__": "상태 바 텍스트",
+    "status_bar_text": {},
+    "__filter_label__": "필터 라벨 텍스트",
+    "filter_label": {},
+    "__stats_text__": "통계 수치 텍스트",
+    "stats_text": {},
+    "__footer_key__": "기능 바 단축키",
+    "footer_key": {},
+    "__footer_text__": "기능 바 설명",
+    "footer_text": {},
+    "__panel_selected_border__": "3개 이상 패널에서 DIFF 첫 번째 선택 시 테두리",
+    "panel_selected_border": {},
+    "__progress_spinner__": "비교 진행 중 스피너 색상",
+    "progress_spinner": {},
+    "__progress_bar_fill__": "비교 프로그레스 바 채움",
+    "progress_bar_fill": {},
+    "__progress_bar_empty__": "비교 프로그레스 바 빈 부분",
+    "progress_bar_empty": {},
+    "__progress_percent_text__": "비교 프로그레스 퍼센트 텍스트",
+    "progress_percent_text": {},
+    "__progress_value_text__": "비교 중 현재 파일 경로 텍스트",
+    "progress_value_text": {},
+    "__progress_hint_text__": "비교 중 ESC 힌트 텍스트",
+    "progress_hint_text": {}
+  }},
+
+  "__diff_file_view__": "=== Diff File View: 파일 내용을 좌우 나란히 라인별로 비교하는 화면 ===",
+  "diff_file_view": {{
+    "__bg__": "배경색",
+    "bg": {},
+    "__border__": "테두리",
+    "border": {},
+    "__header_text__": "헤더 텍스트",
+    "header_text": {},
+    "__line_number__": "라인 번호",
+    "line_number": {},
+    "__same_text__": "동일 라인 텍스트",
+    "same_text": {},
+    "__modified_text__": "변경된 라인 텍스트",
+    "modified_text": {},
+    "__modified_bg__": "변경된 라인 배경",
+    "modified_bg": {},
+    "__left_only_text__": "한쪽에만 있는 라인 텍스트 (왼쪽) - right_only_text와 동일한 값을 사용할 것",
+    "left_only_text": {},
+    "__left_only_bg__": "한쪽에만 있는 라인 배경 (왼쪽) - right_only_bg와 동일한 값을 사용할 것",
+    "left_only_bg": {},
+    "__right_only_text__": "한쪽에만 있는 라인 텍스트 (오른쪽) - left_only_text와 동일한 값을 사용할 것",
+    "right_only_text": {},
+    "__right_only_bg__": "한쪽에만 있는 라인 배경 (오른쪽) - left_only_bg와 동일한 값을 사용할 것",
+    "right_only_bg": {},
+    "__empty_bg__": "빈 라인 배경",
+    "empty_bg": {},
+    "__inline_change_bg__": "인라인 변경 하이라이트 배경",
+    "inline_change_bg": {},
+    "__inline_change_text__": "인라인 변경 하이라이트 텍스트",
+    "inline_change_text": {},
+    "__status_bar_bg__": "상태 바 배경",
+    "status_bar_bg": {},
+    "__status_bar_text__": "상태 바 텍스트",
+    "status_bar_text": {},
+    "__footer_key__": "기능 바 단축키",
+    "footer_key": {},
+    "__footer_text__": "기능 바 설명",
     "footer_text": {}
   }}
 }}"#,
@@ -2605,6 +2967,32 @@ impl Theme {
             ci(self.advanced_search.button_text), ci(self.advanced_search.button_selected_bg),
             ci(self.advanced_search.button_selected_text),
             ci(self.advanced_search.footer_key), ci(self.advanced_search.footer_text),
+            // diff
+            ci(self.diff.bg), ci(self.diff.border), ci(self.diff.header_text), ci(self.diff.header_label),
+            ci(self.diff.column_header_bg), ci(self.diff.column_header_text),
+            ci(self.diff.same_text), ci(self.diff.modified_text), ci(self.diff.modified_bg),
+            ci(self.diff.left_only_text), ci(self.diff.left_only_bg),
+            ci(self.diff.right_only_text), ci(self.diff.right_only_bg),
+            ci(self.diff.empty_bg), ci(self.diff.dir_same_text), ci(self.diff.dir_modified_text),
+            ci(self.diff.cursor_bg), ci(self.diff.cursor_text), ci(self.diff.marked_text),
+            ci(self.diff.size_text), ci(self.diff.date_text),
+            ci(self.diff.status_bar_bg), ci(self.diff.status_bar_text),
+            ci(self.diff.filter_label), ci(self.diff.stats_text),
+            ci(self.diff.footer_key), ci(self.diff.footer_text),
+            ci(self.diff.panel_selected_border),
+            ci(self.diff.progress_spinner), ci(self.diff.progress_bar_fill),
+            ci(self.diff.progress_bar_empty), ci(self.diff.progress_percent_text),
+            ci(self.diff.progress_value_text), ci(self.diff.progress_hint_text),
+            // diff_file_view
+            ci(self.diff_file_view.bg), ci(self.diff_file_view.border),
+            ci(self.diff_file_view.header_text), ci(self.diff_file_view.line_number),
+            ci(self.diff_file_view.same_text), ci(self.diff_file_view.modified_text),
+            ci(self.diff_file_view.modified_bg), ci(self.diff_file_view.left_only_text),
+            ci(self.diff_file_view.left_only_bg), ci(self.diff_file_view.right_only_text),
+            ci(self.diff_file_view.right_only_bg), ci(self.diff_file_view.empty_bg),
+            ci(self.diff_file_view.inline_change_bg), ci(self.diff_file_view.inline_change_text),
+            ci(self.diff_file_view.status_bar_bg), ci(self.diff_file_view.status_bar_text),
+            ci(self.diff_file_view.footer_key), ci(self.diff_file_view.footer_text),
         )
     }
 }

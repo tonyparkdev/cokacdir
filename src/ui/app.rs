@@ -161,6 +161,8 @@ pub enum Screen {
     SystemInfo,
     ImageViewer,
     SearchResult,
+    DiffScreen,
+    DiffFileView,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -193,6 +195,12 @@ pub struct SettingsState {
     pub themes: Vec<String>,
     /// Currently selected theme index
     pub theme_index: usize,
+    /// Currently selected field row in settings dialog (0=theme, 1=diff method)
+    pub selected_field: usize,
+    /// Available diff compare methods
+    pub diff_methods: Vec<String>,
+    /// Currently selected diff method index
+    pub diff_method_index: usize,
 }
 
 impl SettingsState {
@@ -206,6 +214,9 @@ impl SettingsState {
                     if path.extension().map(|e| e == "json").unwrap_or(false) {
                         if let Some(stem) = path.file_stem() {
                             let name = stem.to_string_lossy().to_string();
+                            if name.contains(' ') {
+                                continue;
+                            }
                             if !themes.contains(&name) {
                                 themes.push(name);
                             }
@@ -221,9 +232,21 @@ impl SettingsState {
             .position(|t| t == &settings.theme.name)
             .unwrap_or(0);
 
+        let diff_methods = vec![
+            "content".to_string(),
+            "modified_time".to_string(),
+            "content_and_time".to_string(),
+        ];
+        let diff_method_index = diff_methods.iter()
+            .position(|m| m == &settings.diff_compare_method)
+            .unwrap_or(0);
+
         Self {
             themes,
             theme_index,
+            selected_field: 0,
+            diff_methods,
+            diff_method_index,
         }
     }
 
@@ -243,6 +266,26 @@ impl SettingsState {
                 self.themes.len() - 1
             } else {
                 self.theme_index - 1
+            };
+        }
+    }
+
+    pub fn current_diff_method(&self) -> &str {
+        self.diff_methods.get(self.diff_method_index).map(|s| s.as_str()).unwrap_or("content")
+    }
+
+    pub fn next_diff_method(&mut self) {
+        if !self.diff_methods.is_empty() {
+            self.diff_method_index = (self.diff_method_index + 1) % self.diff_methods.len();
+        }
+    }
+
+    pub fn prev_diff_method(&mut self) {
+        if !self.diff_methods.is_empty() {
+            self.diff_method_index = if self.diff_method_index == 0 {
+                self.diff_methods.len() - 1
+            } else {
+                self.diff_method_index - 1
             };
         }
     }
@@ -873,6 +916,11 @@ pub struct App {
 
     // Settings dialog state
     pub settings_state: Option<SettingsState>,
+
+    // Diff screen state
+    pub diff_first_panel: Option<usize>,
+    pub diff_state: Option<crate::ui::diff_screen::DiffState>,
+    pub diff_file_view_state: Option<crate::ui::diff_file_view::DiffFileViewState>,
 }
 
 impl App {
@@ -940,6 +988,9 @@ impl App {
             copy_exclude_state: None,
             help_state: HelpState::default(),
             settings_state: None,
+            diff_first_panel: None,
+            diff_state: None,
+            diff_file_view_state: None,
         }
     }
 
@@ -1028,6 +1079,9 @@ impl App {
             copy_exclude_state: None,
             help_state: HelpState::default(),
             settings_state: None,
+            diff_first_panel: None,
+            diff_state: None,
+            diff_file_view_state: None,
         }
     }
 
@@ -1092,6 +1146,9 @@ impl App {
         // Update extension_handler setting
         self.settings.extension_handler = new_settings.extension_handler;
 
+        // Update diff compare method
+        self.settings.diff_compare_method = new_settings.diff_compare_method;
+
         // Update settings
         self.settings.theme = new_settings.theme;
         self.settings.panels = new_settings.panels;
@@ -1134,6 +1191,10 @@ impl App {
                 self.theme = crate::ui::theme::Theme::load(&new_theme_name);
                 self.theme_watch_state.update_theme(&new_theme_name);
             }
+
+            // Update diff compare method
+            let new_diff_method = state.current_diff_method().to_string();
+            self.settings.diff_compare_method = new_diff_method;
 
             // Save settings
             let _ = self.settings.save();
@@ -1942,6 +2003,62 @@ impl App {
             panel.selected_files.clear();
             panel.load_files();
         }
+    }
+
+    /// Start diff comparison between panels
+    /// With 2 panels: immediately enter diff screen
+    /// With 3+ panels: first call selects first panel, second call selects second panel
+    pub fn start_diff(&mut self) {
+        if self.panels.len() < 2 {
+            self.show_message("Need at least 2 panels for diff");
+            return;
+        }
+
+        if self.panels.len() == 2 {
+            // 2 panels: immediate diff
+            let left = self.panels[0].path.clone();
+            let right = self.panels[1].path.clone();
+            self.enter_diff_screen(left, right);
+        } else {
+            // 3+ panels: 2-stage selection
+            if let Some(first) = self.diff_first_panel {
+                // Second selection
+                let second = self.active_panel_index;
+                if first == second {
+                    self.show_message("Select a different panel for diff");
+                    return;
+                }
+                let left = self.panels[first].path.clone();
+                let right = self.panels[second].path.clone();
+                self.diff_first_panel = None;
+                self.enter_diff_screen(left, right);
+            } else {
+                // First selection
+                self.diff_first_panel = Some(self.active_panel_index);
+                self.show_message("Select second panel for diff (8) or ESC to cancel");
+            }
+        }
+    }
+
+    /// Enter diff screen with two directory paths
+    pub fn enter_diff_screen(&mut self, left: PathBuf, right: PathBuf) {
+        let compare_method = crate::ui::diff_screen::parse_compare_method(&self.settings.diff_compare_method);
+        let sort_by = self.active_panel().sort_by;
+        let sort_order = self.active_panel().sort_order;
+        let mut state = crate::ui::diff_screen::DiffState::new(
+            left, right, compare_method, sort_by, sort_order,
+        );
+        state.start_comparison();
+        self.diff_state = Some(state);
+        self.current_screen = Screen::DiffScreen;
+    }
+
+    /// Enter file content diff view from the diff screen
+    pub fn enter_diff_file_view(&mut self, left_path: PathBuf, right_path: PathBuf, file_name: String) {
+        self.diff_file_view_state = Some(
+            crate::ui::diff_file_view::DiffFileViewState::new(left_path, right_path, file_name)
+        );
+        self.current_screen = Screen::DiffFileView;
     }
 
     pub fn get_operation_files(&self) -> Vec<String> {

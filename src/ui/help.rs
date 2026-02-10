@@ -327,11 +327,43 @@ fn build_help_content(theme: &Theme) -> Vec<Line<'static>> {
     lines.push(Line::from(""));
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Section 12: Settings
+    // Section 12: Diff Compare
+    // ═══════════════════════════════════════════════════════════════════════
+    lines.push(section("Diff Compare"));
+    lines.push(key_line("8", "Start folder diff (2 panels)"));
+    lines.push(Line::from(vec![
+        Span::styled("  ".to_string(), desc_style),
+        Span::styled("3+ panels: press 8 twice to select pair".to_string(), hint_style),
+    ]));
+    lines.push(key_line("Up/Down", "Move cursor"));
+    lines.push(key_line("PgUp/PgDn", "Page scroll"));
+    lines.push(key_line("Home/End", "Go to first/last item"));
+    lines.push(key_line("Enter", "View file content diff"));
+    lines.push(key_line("Space", "Select/deselect item"));
+    lines.push(key_line("F", "Cycle filter (All/Diff/L/R)"));
+    lines.push(key_line("N/S/D/Y", "Sort by name/size/date/type"));
+    lines.push(key_line("Esc", "Return to file panel"));
+    lines.push(Line::from(""));
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Section 12b: File Content Diff
+    // ═══════════════════════════════════════════════════════════════════════
+    lines.push(section("File Content Diff"));
+    lines.push(key_line("Up/Down", "Scroll line by line"));
+    lines.push(key_line("PgUp/PgDn", "Page scroll"));
+    lines.push(key_line("Home/End", "Go to start/end"));
+    lines.push(key_line("n", "Jump to next change"));
+    lines.push(key_line("N", "Jump to previous change"));
+    lines.push(key_line("Esc", "Return to diff screen"));
+    lines.push(Line::from(""));
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Section 13: Settings
     // ═══════════════════════════════════════════════════════════════════════
     lines.push(section("Settings"));
     lines.push(key_line("` (backtick)", "Open settings dialog"));
-    lines.push(key_line("Left/Right", "Change theme"));
+    lines.push(key_line("Up/Down", "Select setting row"));
+    lines.push(key_line("Left/Right", "Change value (theme/diff)"));
     lines.push(key_line("Enter", "Save settings"));
     lines.push(key_line("Esc", "Cancel"));
     lines.push(Line::from(vec![
@@ -377,6 +409,8 @@ fn build_help_content(theme: &Theme) -> Vec<Line<'static>> {
         Span::styled("home ", desc_style),
         Span::styled("2", key_highlight_style),
         Span::styled("ref ", desc_style),
+        Span::styled("8", key_highlight_style),
+        Span::styled("diff ", desc_style),
         Span::styled("0", key_highlight_style),
         Span::styled("+pan ", desc_style),
         Span::styled("9", key_highlight_style),

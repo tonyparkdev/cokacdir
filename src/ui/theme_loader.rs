@@ -54,6 +54,10 @@ pub struct ThemeJson {
     pub help: HelpColorsJson,
     #[serde(default)]
     pub advanced_search: AdvancedSearchColorsJson,
+    #[serde(default)]
+    pub diff: DiffColorsJson,
+    #[serde(default)]
+    pub diff_file_view: DiffFileViewColorsJson,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -686,32 +690,159 @@ pub struct AdvancedSearchColorsJson {
     pub footer_text: u8,
 }
 
+#[derive(Debug, Deserialize, Default)]
+pub struct DiffColorsJson {
+    #[serde(default = "default_235")]
+    pub bg: u8,
+    #[serde(default = "default_245")]
+    pub border: u8,
+    #[serde(default = "default_252")]
+    pub header_text: u8,
+    #[serde(default = "default_117")]
+    pub header_label: u8,
+    #[serde(default = "default_236")]
+    pub column_header_bg: u8,
+    #[serde(default = "default_252")]
+    pub column_header_text: u8,
+    #[serde(default = "default_252")]
+    pub same_text: u8,
+    #[serde(default = "default_220")]
+    pub modified_text: u8,
+    #[serde(default = "default_58")]
+    pub modified_bg: u8,
+    #[serde(default = "default_117")]
+    pub left_only_text: u8,
+    #[serde(default = "default_22")]
+    pub left_only_bg: u8,
+    #[serde(default = "default_117")]
+    pub right_only_text: u8,
+    #[serde(default = "default_24")]
+    pub right_only_bg: u8,
+    #[serde(default = "default_236")]
+    pub empty_bg: u8,
+    #[serde(default = "default_117")]
+    pub dir_same_text: u8,
+    #[serde(default = "default_220")]
+    pub dir_modified_text: u8,
+    #[serde(default = "default_240")]
+    pub cursor_bg: u8,
+    #[serde(default = "default_255")]
+    pub cursor_text: u8,
+    #[serde(default = "default_198")]
+    pub marked_text: u8,
+    #[serde(default = "default_245")]
+    pub size_text: u8,
+    #[serde(default = "default_245")]
+    pub date_text: u8,
+    #[serde(default = "default_237")]
+    pub status_bar_bg: u8,
+    #[serde(default = "default_252")]
+    pub status_bar_text: u8,
+    #[serde(default = "default_117")]
+    pub filter_label: u8,
+    #[serde(default = "default_252")]
+    pub stats_text: u8,
+    #[serde(default = "default_117")]
+    pub footer_key: u8,
+    #[serde(default = "default_245")]
+    pub footer_text: u8,
+    #[serde(default = "default_198")]
+    pub panel_selected_border: u8,
+    #[serde(default = "default_117")]
+    pub progress_spinner: u8,
+    #[serde(default = "default_117")]
+    pub progress_bar_fill: u8,
+    #[serde(default = "default_245")]
+    pub progress_bar_empty: u8,
+    #[serde(default = "default_252")]
+    pub progress_percent_text: u8,
+    #[serde(default = "default_252")]
+    pub progress_value_text: u8,
+    #[serde(default = "default_245")]
+    pub progress_hint_text: u8,
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct DiffFileViewColorsJson {
+    #[serde(default = "default_235")]
+    pub bg: u8,
+    #[serde(default = "default_252")]
+    pub border: u8,
+    #[serde(default = "default_252")]
+    pub header_text: u8,
+    #[serde(default = "default_245")]
+    pub line_number: u8,
+    #[serde(default = "default_252")]
+    pub same_text: u8,
+    #[serde(default = "default_220")]
+    pub modified_text: u8,
+    #[serde(default = "default_58")]
+    pub modified_bg: u8,
+    #[serde(default = "default_117")]
+    pub left_only_text: u8,
+    #[serde(default = "default_22")]
+    pub left_only_bg: u8,
+    #[serde(default = "default_117")]
+    pub right_only_text: u8,
+    #[serde(default = "default_24")]
+    pub right_only_bg: u8,
+    #[serde(default = "default_236")]
+    pub empty_bg: u8,
+    #[serde(default = "default_94")]
+    pub inline_change_bg: u8,
+    #[serde(default = "default_220")]
+    pub inline_change_text: u8,
+    #[serde(default = "default_237")]
+    pub status_bar_bg: u8,
+    #[serde(default = "default_252")]
+    pub status_bar_text: u8,
+    #[serde(default = "default_117")]
+    pub footer_key: u8,
+    #[serde(default = "default_245")]
+    pub footer_text: u8,
+}
+
 // 기본값 함수들
 fn default_21() -> u8 { 21 }
+fn default_22() -> u8 { 22 }
+fn default_24() -> u8 { 24 }
+fn default_25() -> u8 { 25 }
 fn default_28() -> u8 { 28 }
 fn default_34() -> u8 { 34 }
 fn default_136() -> u8 { 136 }
 fn default_37() -> u8 { 37 }
+fn default_58() -> u8 { 58 }
 fn default_67() -> u8 { 67 }
 fn default_74() -> u8 { 74 }
 fn default_91() -> u8 { 91 }
+fn default_94() -> u8 { 94 }
 fn default_102() -> u8 { 102 }
 fn default_117() -> u8 { 117 }
 fn default_127() -> u8 { 127 }
 fn default_130() -> u8 { 130 }
 fn default_161() -> u8 { 161 }
 fn default_166() -> u8 { 166 }
+fn default_189() -> u8 { 189 }
+fn default_194() -> u8 { 194 }
 fn default_198() -> u8 { 198 }
 fn default_208() -> u8 { 208 }
+fn default_220() -> u8 { 220 }
+fn default_222() -> u8 { 222 }
+fn default_230() -> u8 { 230 }
 fn default_231() -> u8 { 231 }
+fn default_235() -> u8 { 235 }
 fn default_236() -> u8 { 236 }
+fn default_237() -> u8 { 237 }
 fn default_238() -> u8 { 238 }
+fn default_239() -> u8 { 239 }
 fn default_240() -> u8 { 240 }
 fn default_241() -> u8 { 241 }
 fn default_242() -> u8 { 242 }
 fn default_243() -> u8 { 243 }
+fn default_245() -> u8 { 245 }
 fn default_248() -> u8 { 248 }
 fn default_249() -> u8 { 249 }
+fn default_252() -> u8 { 252 }
 fn default_251() -> u8 { 251 }
 fn default_253() -> u8 { 253 }
 fn default_254() -> u8 { 254 }
@@ -1115,6 +1246,64 @@ pub fn theme_from_json(json: &ThemeJson) -> Theme {
         footer_text: idx(json.advanced_search.footer_text),
     };
 
+    let diff = DiffColors {
+        bg: idx(json.diff.bg),
+        border: idx(json.diff.border),
+        header_text: idx(json.diff.header_text),
+        header_label: idx(json.diff.header_label),
+        column_header_bg: idx(json.diff.column_header_bg),
+        column_header_text: idx(json.diff.column_header_text),
+        same_text: idx(json.diff.same_text),
+        modified_text: idx(json.diff.modified_text),
+        modified_bg: idx(json.diff.modified_bg),
+        left_only_text: idx(json.diff.left_only_text),
+        left_only_bg: idx(json.diff.left_only_bg),
+        right_only_text: idx(json.diff.right_only_text),
+        right_only_bg: idx(json.diff.right_only_bg),
+        empty_bg: idx(json.diff.empty_bg),
+        dir_same_text: idx(json.diff.dir_same_text),
+        dir_modified_text: idx(json.diff.dir_modified_text),
+        cursor_bg: idx(json.diff.cursor_bg),
+        cursor_text: idx(json.diff.cursor_text),
+        marked_text: idx(json.diff.marked_text),
+        size_text: idx(json.diff.size_text),
+        date_text: idx(json.diff.date_text),
+        status_bar_bg: idx(json.diff.status_bar_bg),
+        status_bar_text: idx(json.diff.status_bar_text),
+        filter_label: idx(json.diff.filter_label),
+        stats_text: idx(json.diff.stats_text),
+        footer_key: idx(json.diff.footer_key),
+        footer_text: idx(json.diff.footer_text),
+        panel_selected_border: idx(json.diff.panel_selected_border),
+        progress_spinner: idx(json.diff.progress_spinner),
+        progress_bar_fill: idx(json.diff.progress_bar_fill),
+        progress_bar_empty: idx(json.diff.progress_bar_empty),
+        progress_percent_text: idx(json.diff.progress_percent_text),
+        progress_value_text: idx(json.diff.progress_value_text),
+        progress_hint_text: idx(json.diff.progress_hint_text),
+    };
+
+    let diff_file_view = DiffFileViewColors {
+        bg: idx(json.diff_file_view.bg),
+        border: idx(json.diff_file_view.border),
+        header_text: idx(json.diff_file_view.header_text),
+        line_number: idx(json.diff_file_view.line_number),
+        same_text: idx(json.diff_file_view.same_text),
+        modified_text: idx(json.diff_file_view.modified_text),
+        modified_bg: idx(json.diff_file_view.modified_bg),
+        left_only_text: idx(json.diff_file_view.left_only_text),
+        left_only_bg: idx(json.diff_file_view.left_only_bg),
+        right_only_text: idx(json.diff_file_view.right_only_text),
+        right_only_bg: idx(json.diff_file_view.right_only_bg),
+        empty_bg: idx(json.diff_file_view.empty_bg),
+        inline_change_bg: idx(json.diff_file_view.inline_change_bg),
+        inline_change_text: idx(json.diff_file_view.inline_change_text),
+        status_bar_bg: idx(json.diff_file_view.status_bar_bg),
+        status_bar_text: idx(json.diff_file_view.status_bar_text),
+        footer_key: idx(json.diff_file_view.footer_key),
+        footer_text: idx(json.diff_file_view.footer_text),
+    };
+
     Theme {
         palette,
         state,
@@ -1137,6 +1326,8 @@ pub fn theme_from_json(json: &ThemeJson) -> Theme {
         file_info,
         help,
         advanced_search,
+        diff,
+        diff_file_view,
         chars: ThemeChars::default(),
     }
 }
