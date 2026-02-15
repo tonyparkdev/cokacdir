@@ -579,10 +579,11 @@ fn run_app<B: ratatui::backend::Backend>(
                     if let Some(idx) = app.active_panel().files.iter().position(|f| f.name == extract_dir) {
                         app.active_panel_mut().selected_index = idx;
                     }
-                // Focus on first pasted file if applicable
-                } else if let Some(paste_name) = app.pending_paste_focus.take() {
+                // Focus on first pasted file (by panel's sorted order) if applicable
+                } else if let Some(paste_names) = app.pending_paste_focus.take() {
                     app.refresh_panels();
-                    if let Some(idx) = app.active_panel().files.iter().position(|f| f.name == paste_name) {
+                    // Find the first file in the panel's sorted list that matches any pasted name
+                    if let Some(idx) = app.active_panel().files.iter().position(|f| paste_names.contains(&f.name)) {
                         app.active_panel_mut().selected_index = idx;
                     }
                 } else {

@@ -1386,8 +1386,8 @@ pub struct App {
     // Pending extract directory name (for focusing after completion)
     pub pending_extract_dir: Option<String>,
 
-    // Pending paste focus name (for focusing on first pasted file after completion)
-    pub pending_paste_focus: Option<String>,
+    // Pending paste focus names (for focusing on first pasted file after completion)
+    pub pending_paste_focus: Option<Vec<String>>,
 
     // Conflict resolution state for duplicate file handling
     pub conflict_state: Option<ConflictState>,
@@ -4156,9 +4156,9 @@ impl App {
                 let source_base = clipboard.source_path.display().to_string();
                 let target = target_path.display().to_string();
 
-                // Set pending focus to the first pasted file
-                if let Some(first) = clipboard.files.first() {
-                    self.pending_paste_focus = Some(first.clone());
+                // Set pending focus to pasted file names
+                if !clipboard.files.is_empty() {
+                    self.pending_paste_focus = Some(clipboard.files.clone());
                 }
 
                 let mut progress = FileOperationProgress::new(op_type);
@@ -4232,9 +4232,9 @@ impl App {
             let source_base = clipboard.source_path.display().to_string();
             let target = target_path.display().to_string();
 
-            // Set pending focus to the first pasted file
-            if let Some(first) = valid_files.first() {
-                self.pending_paste_focus = Some(first.clone());
+            // Set pending focus to pasted file names
+            if !valid_files.is_empty() {
+                self.pending_paste_focus = Some(valid_files.clone());
             }
 
             let mut progress = FileOperationProgress::new(op_type);
@@ -4456,9 +4456,9 @@ impl App {
 
     /// Execute paste operation (internal, called after conflict resolution or when no conflicts)
     fn execute_paste_operation(&mut self, clipboard: Clipboard, valid_files: Vec<String>, target_path: PathBuf) {
-        // Set pending focus to the first pasted file name
-        if let Some(first) = valid_files.first() {
-            self.pending_paste_focus = Some(first.clone());
+        // Set pending focus to pasted file names (will find first match in sorted file list)
+        if !valid_files.is_empty() {
+            self.pending_paste_focus = Some(valid_files.clone());
         }
 
         // Determine operation type for progress
@@ -4564,11 +4564,12 @@ impl App {
 
         let file_count = rename_map.len();
 
-        // Set pending focus to the first dup file name
-        if let Some((_, first_dest)) = rename_map.first() {
-            if let Some(name) = first_dest.file_name() {
-                self.pending_paste_focus = Some(name.to_string_lossy().to_string());
-            }
+        // Set pending focus to all dup file names (will find first match in sorted file list)
+        let dup_names: Vec<String> = rename_map.iter()
+            .filter_map(|(_, dest)| dest.file_name().map(|n| n.to_string_lossy().to_string()))
+            .collect();
+        if !dup_names.is_empty() {
+            self.pending_paste_focus = Some(dup_names);
         }
 
         // Start operation in background thread
@@ -4690,9 +4691,9 @@ impl App {
             })
             .collect();
 
-        // Set pending focus to the first non-skipped file
-        if let Some(first) = files_to_process.first() {
-            self.pending_paste_focus = Some((*first).clone());
+        // Set pending focus to all non-skipped file names (will find first match in sorted file list)
+        if !files_to_process.is_empty() {
+            self.pending_paste_focus = Some(files_to_process.iter().map(|f| (*f).clone()).collect());
         }
 
         if files_to_process.is_empty() {
