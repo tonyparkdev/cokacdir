@@ -68,7 +68,10 @@ async fn handle_message(
     let text = text.to_string();
     let preview = truncate_str(&text, 60);
 
-    if text.starts_with("/start") {
+    if text.starts_with("/help") {
+        println!("  [{timestamp}] ◀ [{user_name}] /help");
+        handle_help_command(&bot, chat_id).await?;
+    } else if text.starts_with("/start") {
         println!("  [{timestamp}] ◀ [{user_name}] /start");
         handle_start_command(&bot, chat_id, &text, &state).await?;
     } else if text.starts_with("/clear") {
@@ -94,6 +97,82 @@ async fn handle_message(
     Ok(())
 }
 
+/// Handle /help command
+async fn handle_help_command(
+    bot: &Bot,
+    chat_id: ChatId,
+) -> ResponseResult<()> {
+    let help = "\
+<b>📖 cokacdir Telegram Bot</b>
+
+Manage server files and chat with Claude AI from Telegram.
+
+━━━━━━━━━━━━━━━━━━━━
+
+<b>🚀 Start Session</b>
+
+<code>/start /path/to/dir</code>
+  Start a session at the specified directory.
+  Supports ~ paths (e.g. <code>/start ~/project</code>).
+  Automatically restores previous session if one exists.
+
+<code>/start</code>
+  Start with an auto-generated workspace directory.
+  (<code>~/.cokacdir/workspace/&lt;random&gt;</code>)
+
+━━━━━━━━━━━━━━━━━━━━
+
+<b>📂 Session Management</b>
+
+<code>/pwd</code>
+  Show the current working directory.
+
+<code>/clear</code>
+  Clear conversation history for the current session.
+  The working directory is kept, but AI forgets prior context.
+
+━━━━━━━━━━━━━━━━━━━━
+
+<b>📁 File Transfer</b>
+
+<code>/down &lt;filepath&gt;</code>
+  Download a file from the server.
+  Relative paths resolve from the session directory.
+  e.g. <code>/down report.txt</code>, <code>/down /tmp/data.csv</code>
+
+<b>Upload</b>
+  Send a file or photo in chat to save it
+  to the current session directory.
+
+━━━━━━━━━━━━━━━━━━━━
+
+<b>💻 Shell Commands</b>
+
+<code>!&lt;command&gt;</code>
+  Execute a shell command on the server.
+  Runs in the current session directory.
+  e.g. <code>!ls -la</code>, <code>!cat main.rs</code>, <code>!mkdir src</code>
+
+━━━━━━━━━━━━━━━━━━━━
+
+<b>🤖 AI Chat</b>
+
+Any message that is not a command above
+is sent to Claude AI.
+AI can read, edit files and run commands
+in your session directory to assist you.
+
+━━━━━━━━━━━━━━━━━━━━
+
+<code>/help</code> — Show this help";
+
+    bot.send_message(chat_id, help)
+        .parse_mode(ParseMode::Html)
+        .await?;
+
+    Ok(())
+}
+
 /// Handle /start <path> command
 async fn handle_start_command(
     bot: &Bot,
@@ -104,23 +183,49 @@ async fn handle_start_command(
     // Extract path from "/start <path>"
     let path_str = text.strip_prefix("/start").unwrap_or("").trim();
 
-    if path_str.is_empty() {
-        bot.send_message(chat_id, "Usage: /start <path>\nExample: /start /tmp")
-            .await?;
-        return Ok(());
-    }
-
-    // Validate path exists
-    let path = Path::new(path_str);
-    if !path.exists() || !path.is_dir() {
-        bot.send_message(chat_id, format!("Error: '{}' is not a valid directory.", path_str))
-            .await?;
-        return Ok(());
-    }
-
-    let canonical_path = path.canonicalize()
-        .map(|p| p.display().to_string())
-        .unwrap_or_else(|_| path_str.to_string());
+    let canonical_path = if path_str.is_empty() {
+        // Create random workspace directory
+        let Some(home) = dirs::home_dir() else {
+            bot.send_message(chat_id, "Error: cannot determine home directory.")
+                .await?;
+            return Ok(());
+        };
+        let workspace_dir = home.join(".cokacdir").join("workspace");
+        use rand::Rng;
+        let random_name: String = rand::thread_rng()
+            .sample_iter(&rand::distributions::Alphanumeric)
+            .take(8)
+            .map(|b| (b as char).to_ascii_lowercase())
+            .collect();
+        let new_dir = workspace_dir.join(&random_name);
+        if let Err(e) = fs::create_dir_all(&new_dir) {
+            bot.send_message(chat_id, format!("Error: failed to create workspace: {}", e))
+                .await?;
+            return Ok(());
+        }
+        new_dir.display().to_string()
+    } else {
+        // Expand ~ to home directory
+        let expanded = if path_str.starts_with("~/") || path_str == "~" {
+            if let Some(home) = dirs::home_dir() {
+                home.join(path_str.strip_prefix("~/").unwrap_or("")).display().to_string()
+            } else {
+                path_str.to_string()
+            }
+        } else {
+            path_str.to_string()
+        };
+        // Validate path exists
+        let path = Path::new(&expanded);
+        if !path.exists() || !path.is_dir() {
+            bot.send_message(chat_id, format!("Error: '{}' is not a valid directory.", expanded))
+                .await?;
+            return Ok(());
+        }
+        path.canonicalize()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|_| expanded)
+    };
 
     // Try to load existing session for this path
     let existing = load_existing_session(&canonical_path);
@@ -349,12 +454,16 @@ async fn handle_shell_command(
         return Ok(());
     }
 
-    // Get current_path for working directory (optional, default to /)
+    // Get current_path for working directory (default to home directory)
     let working_dir = {
         let sessions = state.lock().await;
         sessions.get(&chat_id)
             .and_then(|s| s.current_path.clone())
-            .unwrap_or_else(|| "/".to_string())
+            .unwrap_or_else(|| {
+                dirs::home_dir()
+                    .map(|h| h.display().to_string())
+                    .unwrap_or_else(|| "/".to_string())
+            })
     };
 
     let cmd_owned = cmd_str.to_string();

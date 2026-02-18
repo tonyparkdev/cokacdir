@@ -307,15 +307,37 @@ export default function TelegramBot() {
             {/* /start */}
             <div className="bg-bg-card border border-zinc-800 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
-                <code className="text-accent-cyan font-mono font-semibold">/start &lt;path&gt;</code>
+                <code className="text-accent-cyan font-mono font-semibold">/start [path]</code>
               </div>
               <p className="text-zinc-400 text-sm leading-relaxed">
                 AI 세션을 시작합니다. <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">path</code>는 작업할 디렉토리 경로입니다.
                 이미 해당 경로의 세션이 있으면 자동으로 복원되고, 마지막 5개의 대화 내역이 표시됩니다.
               </p>
-              <code className="block text-zinc-500 font-mono text-sm bg-bg-elevated px-3 py-2 rounded mt-2">
-                /start /home/user/project
-              </code>
+              <p className="text-zinc-400 text-sm leading-relaxed mt-2">
+                경로 없이 <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">/start</code>만 입력하면
+                <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">~/.cokacdir/workspace/</code> 아래에 임시 작업 디렉토리가 자동 생성됩니다.
+                경로를 몰라도 바로 시작할 수 있습니다.
+              </p>
+              <p className="text-zinc-400 text-sm leading-relaxed mt-2">
+                <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">~</code> (틸드) 경로도 지원됩니다.
+                예를 들어 <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">/start ~/project</code>는
+                <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">/start /home/user/project</code>로 자동 변환됩니다.
+              </p>
+              <div className="bg-bg-elevated rounded p-3 mt-2 space-y-1">
+                <code className="block text-zinc-500 font-mono text-sm">/start</code>
+                <code className="block text-zinc-500 font-mono text-sm">/start ~/mywork</code>
+                <code className="block text-zinc-500 font-mono text-sm">/start /home/user/project</code>
+              </div>
+            </div>
+
+            {/* /help */}
+            <div className="bg-bg-card border border-zinc-800 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <code className="text-accent-cyan font-mono font-semibold">/help</code>
+              </div>
+              <p className="text-zinc-400 text-sm leading-relaxed">
+                사용 가능한 모든 명령어와 상세한 사용 방법을 보여줍니다.
+              </p>
             </div>
 
             {/* /clear */}
@@ -360,6 +382,11 @@ export default function TelegramBot() {
                 쉘 명령어를 직접 실행합니다. 현재 세션 경로를 작업 디렉토리로 사용합니다.
                 사용자 입력이 필요한 명령어(예: <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">read</code>)는 자동으로 종료됩니다.
               </p>
+              <p className="text-zinc-400 text-sm leading-relaxed mt-2">
+                <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">/start</code> 이전에도 쉘 명령어를 사용할 수 있으며,
+                이 경우 홈 디렉토리를 기본 작업 경로로 사용합니다.
+                예를 들어 <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">!pwd</code>를 입력하면 홈 디렉토리 경로가 출력됩니다.
+              </p>
               <code className="block text-zinc-500 font-mono text-sm bg-bg-elevated px-3 py-2 rounded mt-2">
                 !ls -la
               </code>
@@ -394,10 +421,44 @@ export default function TelegramBot() {
             실제로 어떻게 활용하는지 구체적인 예시를 통해 알아봅시다.
           </p>
 
-          {/* 워크플로우 1: 프로젝트 파일 확인 */}
+          {/* 워크플로우 1: 빠른 시작 */}
           <div className="bg-bg-card border border-zinc-800 rounded-lg p-5 mb-4">
             <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
               <span className="w-7 h-7 rounded-full bg-accent-cyan/20 text-accent-cyan text-sm flex items-center justify-center flex-shrink-0">1</span>
+              경로 없이 바로 시작하기
+            </h4>
+            <div className="space-y-2 text-sm">
+              <div className="flex gap-3">
+                <span className="text-zinc-500 flex-shrink-0 w-12">나:</span>
+                <code className="text-accent-cyan font-mono">/start</code>
+              </div>
+              <div className="flex gap-3">
+                <span className="text-zinc-500 flex-shrink-0 w-12">Bot:</span>
+                <span className="text-zinc-400">Session started at /home/user/.cokacdir/workspace/a1b2c3.</span>
+              </div>
+              <div className="flex gap-3">
+                <span className="text-zinc-500 flex-shrink-0 w-12">나:</span>
+                <code className="text-accent-cyan font-mono">!ls</code>
+              </div>
+              <div className="flex gap-3">
+                <span className="text-zinc-500 flex-shrink-0 w-12">Bot:</span>
+                <span className="text-zinc-400 font-mono text-xs">(빈 디렉토리)</span>
+              </div>
+              <div className="flex gap-3">
+                <span className="text-zinc-500 flex-shrink-0 w-12">나:</span>
+                <span className="text-zinc-300">간단한 Python hello world 스크립트를 만들어줘</span>
+              </div>
+              <div className="flex gap-3">
+                <span className="text-zinc-500 flex-shrink-0 w-12">Bot:</span>
+                <span className="text-zinc-400">(AI가 hello.py 파일을 생성)</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 워크플로우 2: 프로젝트 파일 확인 */}
+          <div className="bg-bg-card border border-zinc-800 rounded-lg p-5 mb-4">
+            <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+              <span className="w-7 h-7 rounded-full bg-accent-cyan/20 text-accent-cyan text-sm flex items-center justify-center flex-shrink-0">2</span>
               프로젝트 파일 확인하기
             </h4>
             <div className="space-y-2 text-sm">
@@ -428,10 +489,10 @@ export default function TelegramBot() {
             </div>
           </div>
 
-          {/* 워크플로우 2: 로그 분석 */}
+          {/* 워크플로우 3: 로그 분석 */}
           <div className="bg-bg-card border border-zinc-800 rounded-lg p-5 mb-4">
             <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
-              <span className="w-7 h-7 rounded-full bg-accent-cyan/20 text-accent-cyan text-sm flex items-center justify-center flex-shrink-0">2</span>
+              <span className="w-7 h-7 rounded-full bg-accent-cyan/20 text-accent-cyan text-sm flex items-center justify-center flex-shrink-0">3</span>
               서버 로그 분석하기
             </h4>
             <div className="space-y-2 text-sm">
@@ -458,10 +519,10 @@ export default function TelegramBot() {
             </div>
           </div>
 
-          {/* 워크플로우 3: 파일 전송 */}
+          {/* 워크플로우 4: 파일 전송 */}
           <div className="bg-bg-card border border-zinc-800 rounded-lg p-5 mb-4">
             <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
-              <span className="w-7 h-7 rounded-full bg-accent-cyan/20 text-accent-cyan text-sm flex items-center justify-center flex-shrink-0">3</span>
+              <span className="w-7 h-7 rounded-full bg-accent-cyan/20 text-accent-cyan text-sm flex items-center justify-center flex-shrink-0">4</span>
               파일 주고받기
             </h4>
             <div className="space-y-2 text-sm">
@@ -490,10 +551,10 @@ export default function TelegramBot() {
             </div>
           </div>
 
-          {/* 워크플로우 4: Git 작업 */}
+          {/* 워크플로우 5: Git 작업 */}
           <div className="bg-bg-card border border-zinc-800 rounded-lg p-5 mb-6">
             <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
-              <span className="w-7 h-7 rounded-full bg-accent-cyan/20 text-accent-cyan text-sm flex items-center justify-center flex-shrink-0">4</span>
+              <span className="w-7 h-7 rounded-full bg-accent-cyan/20 text-accent-cyan text-sm flex items-center justify-center flex-shrink-0">5</span>
               Git 상태 확인 및 관리
             </h4>
             <div className="space-y-2 text-sm">
@@ -831,15 +892,37 @@ export default function TelegramBot() {
           <div className="space-y-3 mb-6">
             <div className="bg-bg-card border border-zinc-800 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
-                <code className="text-accent-cyan font-mono font-semibold">/start &lt;path&gt;</code>
+                <code className="text-accent-cyan font-mono font-semibold">/start [path]</code>
               </div>
               <p className="text-zinc-400 text-sm leading-relaxed">
                 Start an AI session. <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">path</code> is the directory to work in.
                 If a session already exists for that path, it will be restored with the last 5 conversation entries.
               </p>
-              <code className="block text-zinc-500 font-mono text-sm bg-bg-elevated px-3 py-2 rounded mt-2">
-                /start /home/user/project
-              </code>
+              <p className="text-zinc-400 text-sm leading-relaxed mt-2">
+                If you type <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">/start</code> without a path,
+                a temporary workspace is automatically created under
+                <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">~/.cokacdir/workspace/</code>.
+                You can get started immediately without specifying a directory.
+              </p>
+              <p className="text-zinc-400 text-sm leading-relaxed mt-2">
+                <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">~</code> (tilde) paths are supported.
+                For example, <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">/start ~/project</code> is automatically
+                expanded to <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">/start /home/user/project</code>.
+              </p>
+              <div className="bg-bg-elevated rounded p-3 mt-2 space-y-1">
+                <code className="block text-zinc-500 font-mono text-sm">/start</code>
+                <code className="block text-zinc-500 font-mono text-sm">/start ~/mywork</code>
+                <code className="block text-zinc-500 font-mono text-sm">/start /home/user/project</code>
+              </div>
+            </div>
+
+            <div className="bg-bg-card border border-zinc-800 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <code className="text-accent-cyan font-mono font-semibold">/help</code>
+              </div>
+              <p className="text-zinc-400 text-sm leading-relaxed">
+                Shows all available commands and detailed usage instructions.
+              </p>
             </div>
 
             <div className="bg-bg-card border border-zinc-800 rounded-lg p-4">
@@ -880,6 +963,11 @@ export default function TelegramBot() {
                 Execute a shell command directly. Uses the current session path as the working directory.
                 Commands that require user input (e.g., <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">read</code>) are automatically terminated.
               </p>
+              <p className="text-zinc-400 text-sm leading-relaxed mt-2">
+                Shell commands can be used even before <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">/start</code>.
+                In that case, the home directory is used as the default working directory.
+                For example, typing <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">!pwd</code> will output the home directory path.
+              </p>
               <code className="block text-zinc-500 font-mono text-sm bg-bg-elevated px-3 py-2 rounded mt-2">
                 !ls -la
               </code>
@@ -912,10 +1000,44 @@ export default function TelegramBot() {
             Let's walk through some practical examples of how to use the Telegram Bot.
           </p>
 
-          {/* Workflow 1 */}
+          {/* Workflow 1: Quick Start */}
           <div className="bg-bg-card border border-zinc-800 rounded-lg p-5 mb-4">
             <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
               <span className="w-7 h-7 rounded-full bg-accent-cyan/20 text-accent-cyan text-sm flex items-center justify-center flex-shrink-0">1</span>
+              Quick Start Without a Path
+            </h4>
+            <div className="space-y-2 text-sm">
+              <div className="flex gap-3">
+                <span className="text-zinc-500 flex-shrink-0 w-12">You:</span>
+                <code className="text-accent-cyan font-mono">/start</code>
+              </div>
+              <div className="flex gap-3">
+                <span className="text-zinc-500 flex-shrink-0 w-12">Bot:</span>
+                <span className="text-zinc-400">Session started at /home/user/.cokacdir/workspace/a1b2c3.</span>
+              </div>
+              <div className="flex gap-3">
+                <span className="text-zinc-500 flex-shrink-0 w-12">You:</span>
+                <code className="text-accent-cyan font-mono">!ls</code>
+              </div>
+              <div className="flex gap-3">
+                <span className="text-zinc-500 flex-shrink-0 w-12">Bot:</span>
+                <span className="text-zinc-400 font-mono text-xs">(empty directory)</span>
+              </div>
+              <div className="flex gap-3">
+                <span className="text-zinc-500 flex-shrink-0 w-12">You:</span>
+                <span className="text-zinc-300">Create a simple Python hello world script</span>
+              </div>
+              <div className="flex gap-3">
+                <span className="text-zinc-500 flex-shrink-0 w-12">Bot:</span>
+                <span className="text-zinc-400">(AI creates hello.py file)</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Workflow 2 */}
+          <div className="bg-bg-card border border-zinc-800 rounded-lg p-5 mb-4">
+            <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+              <span className="w-7 h-7 rounded-full bg-accent-cyan/20 text-accent-cyan text-sm flex items-center justify-center flex-shrink-0">2</span>
               Exploring Project Files
             </h4>
             <div className="space-y-2 text-sm">
@@ -946,10 +1068,10 @@ export default function TelegramBot() {
             </div>
           </div>
 
-          {/* Workflow 2 */}
+          {/* Workflow 3 */}
           <div className="bg-bg-card border border-zinc-800 rounded-lg p-5 mb-4">
             <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
-              <span className="w-7 h-7 rounded-full bg-accent-cyan/20 text-accent-cyan text-sm flex items-center justify-center flex-shrink-0">2</span>
+              <span className="w-7 h-7 rounded-full bg-accent-cyan/20 text-accent-cyan text-sm flex items-center justify-center flex-shrink-0">3</span>
               Analyzing Server Logs
             </h4>
             <div className="space-y-2 text-sm">
@@ -976,10 +1098,10 @@ export default function TelegramBot() {
             </div>
           </div>
 
-          {/* Workflow 3 */}
+          {/* Workflow 4 */}
           <div className="bg-bg-card border border-zinc-800 rounded-lg p-5 mb-4">
             <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
-              <span className="w-7 h-7 rounded-full bg-accent-cyan/20 text-accent-cyan text-sm flex items-center justify-center flex-shrink-0">3</span>
+              <span className="w-7 h-7 rounded-full bg-accent-cyan/20 text-accent-cyan text-sm flex items-center justify-center flex-shrink-0">4</span>
               Transferring Files
             </h4>
             <div className="space-y-2 text-sm">
@@ -1008,10 +1130,10 @@ export default function TelegramBot() {
             </div>
           </div>
 
-          {/* Workflow 4 */}
+          {/* Workflow 5 */}
           <div className="bg-bg-card border border-zinc-800 rounded-lg p-5 mb-6">
             <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
-              <span className="w-7 h-7 rounded-full bg-accent-cyan/20 text-accent-cyan text-sm flex items-center justify-center flex-shrink-0">4</span>
+              <span className="w-7 h-7 rounded-full bg-accent-cyan/20 text-accent-cyan text-sm flex items-center justify-center flex-shrink-0">5</span>
               Git Status and Management
             </h4>
             <div className="space-y-2 text-sm">
