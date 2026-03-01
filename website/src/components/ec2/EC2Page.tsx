@@ -173,14 +173,14 @@ function EC2PageInner() {
               AWS EC2 Sandbox
             </div>
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white mb-4">
-              {t('Claude Code on EC2', 'EC2에서 Claude Code')}
+              {t('AI Agents on EC2', 'EC2에서 AI 에이전트')}
               <br />
               <span className="gradient-text">{t('Sandbox Setup', '샌드박스 셋업')}</span>
             </h1>
             <p className="text-lg text-zinc-400 leading-relaxed max-w-2xl mx-auto">
               {t(
-                'A guide to setting up a cokacdir & Claude Code environment on AWS EC2 and using it anywhere via Telegram bot.',
-                'AWS EC2 위에 cokacdir & Claude Code 환경을 만들고, 텔레그램 봇으로 어디서나 사용하는 가이드입니다.'
+                'A guide to setting up a cokacdir & AI agent (Claude Code / Codex CLI) environment on AWS EC2 and using it anywhere via Telegram bot.',
+                'AWS EC2 위에 cokacdir & AI 에이전트 (Claude Code / Codex CLI) 환경을 만들고, 텔레그램 봇으로 어디서나 사용하는 가이드입니다.'
               )}
             </p>
           </div>
@@ -354,8 +354,8 @@ function EC2PageInner() {
             <div className="mt-4 p-4 rounded-lg border border-accent-cyan/20 bg-accent-cyan/5">
               <p className="text-sm text-zinc-300">
                 {t(
-                  'Replace the PEM file name, EC2 IP address, and Telegram bot token with your own and run the command. After a moment, the Claude Code setup process will appear — complete the authentication and you\'re ready.',
-                  '명령어 안의 PEM 파일 이름, EC2 IP 주소, 텔레그램 봇 토큰을 본인 것으로 바꿔 넣고 실행하세요. 잠시 기다리면 Claude Code 설정 과정이 나오고, 인증을 마치면 준비 완료입니다.'
+                  'Replace the PEM file name, EC2 IP address, and Telegram bot token with your own and run the command. After a moment, the Claude Code setup process will appear — complete the authentication and you\'re ready. To use Codex CLI instead, switch with the /model command in Telegram.',
+                  '명령어 안의 PEM 파일 이름, EC2 IP 주소, 텔레그램 봇 토큰을 본인 것으로 바꿔 넣고 실행하세요. 잠시 기다리면 Claude Code 설정 과정이 나오고, 인증을 마치면 준비 완료입니다. Codex CLI를 사용하려면 텔레그램에서 /model 명령으로 전환하세요.'
                 )}
               </p>
             </div>
@@ -391,21 +391,21 @@ function EC2PageInner() {
               </InlineStep>
               <InlineStep n={2}>
                 {t(
-                  <>Type <code className="px-1.5 py-0.5 bg-bg-elevated rounded text-accent-cyan text-sm">/start /home/ubuntu</code> to launch Claude as if you're in the <code className="px-1.5 py-0.5 bg-bg-elevated rounded text-zinc-300 text-sm">/home/ubuntu</code> directory on EC2.</>,
-                  <><code className="px-1.5 py-0.5 bg-bg-elevated rounded text-accent-cyan text-sm">/start /home/ubuntu</code> 를 입력하면 EC2 컴퓨터 상 <code className="px-1.5 py-0.5 bg-bg-elevated rounded text-zinc-300 text-sm">/home/ubuntu</code> 폴더에서 Claude를 실행한 것과 같은 상태가 됩니다.</>
+                  <>Type <code className="px-1.5 py-0.5 bg-bg-elevated rounded text-accent-cyan text-sm">/start /home/ubuntu</code> to launch the AI agent as if you're in the <code className="px-1.5 py-0.5 bg-bg-elevated rounded text-zinc-300 text-sm">/home/ubuntu</code> directory on EC2.</>,
+                  <><code className="px-1.5 py-0.5 bg-bg-elevated rounded text-accent-cyan text-sm">/start /home/ubuntu</code> 를 입력하면 EC2 컴퓨터 상 <code className="px-1.5 py-0.5 bg-bg-elevated rounded text-zinc-300 text-sm">/home/ubuntu</code> 폴더에서 AI 에이전트를 실행한 것과 같은 상태가 됩니다.</>
                 )}
               </InlineStep>
               <InlineStep n={3}>
                 {t(
-                  <>From now on, you can make requests just like using Claude Code, such as <strong className="text-white">"Build me a website"</strong>.</>,
-                  <>이제부터 <strong className="text-white">"웹사이트 만들어줘"</strong> 와 같이 Claude Code를 사용할 때와 같은 방식으로 요청할 수 있습니다.</>
+                  <>From now on, you can make requests just like using Claude Code or Codex CLI, such as <strong className="text-white">"Build me a website"</strong>.</>,
+                  <>이제부터 <strong className="text-white">"웹사이트 만들어줘"</strong> 와 같이 Claude Code 또는 Codex CLI를 사용할 때와 같은 방식으로 요청할 수 있습니다.</>
                 )}
               </InlineStep>
 
               <div className="mt-2 flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={() => {
-                    navigate('/tutorial', { state: { scrollTo: 'telegram-workflow' } })
+                    navigate('/telegram-tutorial', { state: { scrollTo: 'telegram-workflow' } })
                   }}
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-accent-cyan/30 bg-accent-cyan/5 text-accent-cyan text-sm font-medium hover:bg-accent-cyan/10 transition-colors cursor-pointer"
                 >
@@ -414,7 +414,7 @@ function EC2PageInner() {
                 </button>
                 <button
                   onClick={() => {
-                    navigate('/tutorial', { state: { scrollTo: 'telegram-commands' } })
+                    navigate('/telegram-tutorial', { state: { scrollTo: 'telegram-commands' } })
                   }}
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-accent-cyan/30 bg-accent-cyan/5 text-accent-cyan text-sm font-medium hover:bg-accent-cyan/10 transition-colors cursor-pointer"
                 >

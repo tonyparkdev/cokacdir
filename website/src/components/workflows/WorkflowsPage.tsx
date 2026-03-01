@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Github, Send, StopCircle, TerminalSquare, ShieldCheck, FileUp, Layers,
-  Cloud, Apple, BookOpen, CheckCircle, Download,
+  Cloud, Apple, Monitor, BookOpen, CheckCircle, Download,
   Upload, BarChart3, Ban, Plus, Minus
 } from 'lucide-react'
 import { LanguageProvider, useLanguage } from '../tutorial/LanguageContext'
@@ -650,8 +650,8 @@ function WorkflowsPageInner() {
           </h3>
           <p className="text-zinc-400 text-sm mb-6 max-w-lg mx-auto">
             {t(
-              'Set up your own cokacdir Telegram bot and start controlling Claude Code from anywhere.',
-              '나만의 cokacdir 텔레그램 봇을 설정하고 어디서든 Claude Code를 제어하세요.'
+              'Set up your own cokacdir Telegram bot and start controlling AI agents from anywhere.',
+              '나만의 cokacdir 텔레그램 봇을 설정하고 어디서든 AI 에이전트를 제어하세요.'
             )}
           </p>
           <div className="flex flex-wrap justify-center gap-3">
@@ -668,6 +668,13 @@ function WorkflowsPageInner() {
             >
               <Apple className="w-4 h-4" />
               {t('macOS Setup', 'macOS 설정')}
+            </Link>
+            <Link
+              to="/windows"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-zinc-800 border border-zinc-600 text-zinc-200 font-bold hover:bg-zinc-700 transition-all duration-200"
+            >
+              <Monitor className="w-4 h-4" />
+              {t('Windows Setup', 'Windows 설정')}
             </Link>
             <Link
               to="/tutorial"

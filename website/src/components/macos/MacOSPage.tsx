@@ -179,8 +179,8 @@ function MacOSPageInner() {
             </h1>
             <p className="text-lg text-zinc-400 leading-relaxed max-w-2xl mx-auto">
               {t(
-                'Install cokacdir on a macOS with Claude Code and use it anywhere via Telegram bot.',
-                'Claude Code가 설치된 macOS에 cokacdir을 설치하고, 텔레그램 봇으로 어디서나 사용하는 가이드입니다.'
+                'Install cokacdir on a macOS with Claude Code or Codex CLI and use it anywhere via Telegram bot.',
+                'Claude Code 또는 Codex CLI가 설치된 macOS에 cokacdir을 설치하고, 텔레그램 봇으로 어디서나 사용하는 가이드입니다.'
               )}
             </p>
           </div>
@@ -200,7 +200,7 @@ function MacOSPageInner() {
               <div className="flex items-center gap-3 p-3 rounded-lg bg-bg-card border border-zinc-800">
                 <Apple className="w-5 h-5 text-accent-cyan flex-shrink-0" />
                 <div>
-                  <p className="text-white font-medium text-sm">{t('macOS with Claude Code', 'Claude Code 설치된 macOS')}</p>
+                  <p className="text-white font-medium text-sm">{t('macOS with Claude Code or Codex CLI', 'Claude Code 또는 Codex CLI 설치된 macOS')}</p>
                   <p className="text-zinc-500 text-xs">{t('Terminal accessible', '터미널 사용 가능')}</p>
                 </div>
               </div>
@@ -317,21 +317,21 @@ function MacOSPageInner() {
               </InlineStep>
               <InlineStep n={2}>
                 {t(
-                  <>Type <code className="px-1.5 py-0.5 bg-bg-elevated rounded text-accent-cyan text-sm">/start</code> to launch Claude.</>,
-                  <><code className="px-1.5 py-0.5 bg-bg-elevated rounded text-accent-cyan text-sm">/start</code> 를 입력하면 Claude를 실행한 것과 같은 상태가 됩니다.</>
+                  <>Type <code className="px-1.5 py-0.5 bg-bg-elevated rounded text-accent-cyan text-sm">/start</code> to launch the AI agent.</>,
+                  <><code className="px-1.5 py-0.5 bg-bg-elevated rounded text-accent-cyan text-sm">/start</code> 를 입력하면 AI 에이전트를 실행한 것과 같은 상태가 됩니다.</>
                 )}
               </InlineStep>
               <InlineStep n={3}>
                 {t(
-                  <>From now on, you can make requests just like using Claude Code, such as <strong className="text-white">"Build me a website"</strong>.</>,
-                  <>이제부터 <strong className="text-white">"웹사이트 만들어줘"</strong> 와 같이 Claude Code를 사용할 때와 같은 방식으로 요청할 수 있습니다.</>
+                  <>From now on, you can make requests just like using Claude Code or Codex CLI, such as <strong className="text-white">"Build me a website"</strong>.</>,
+                  <>이제부터 <strong className="text-white">"웹사이트 만들어줘"</strong> 와 같이 Claude Code 또는 Codex CLI를 사용할 때와 같은 방식으로 요청할 수 있습니다.</>
                 )}
               </InlineStep>
 
               <div className="mt-2 flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={() => {
-                    navigate('/tutorial', { state: { scrollTo: 'telegram-workflow' } })
+                    navigate('/telegram-tutorial', { state: { scrollTo: 'telegram-workflow' } })
                   }}
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-accent-cyan/30 bg-accent-cyan/5 text-accent-cyan text-sm font-medium hover:bg-accent-cyan/10 transition-colors cursor-pointer"
                 >
@@ -340,7 +340,7 @@ function MacOSPageInner() {
                 </button>
                 <button
                   onClick={() => {
-                    navigate('/tutorial', { state: { scrollTo: 'telegram-commands' } })
+                    navigate('/telegram-tutorial', { state: { scrollTo: 'telegram-commands' } })
                   }}
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-accent-cyan/30 bg-accent-cyan/5 text-accent-cyan text-sm font-medium hover:bg-accent-cyan/10 transition-colors cursor-pointer"
                 >

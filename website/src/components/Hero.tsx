@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { BookOpen, Cloud, Apple, Send, Zap } from 'lucide-react'
+import { BookOpen, Cloud, Apple, Monitor, Send, Zap } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useLanguage } from './tutorial/LanguageContext'
 
@@ -143,8 +143,8 @@ export default function Hero() {
           className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-3 sm:mb-4"
         >
           {t(
-            <>Claude Code, <span className="text-glow text-accent-cyan">Anywhere</span></>,
-            <>Claude Code, <span className="text-glow text-accent-cyan">어디서든</span></>
+            <>AI Coding Agents, <span className="text-glow text-accent-cyan">Anywhere</span></>,
+            <>AI 코딩 에이전트, <span className="text-glow text-accent-cyan">어디서든</span></>
           )}
         </motion.p>
 
@@ -156,8 +156,8 @@ export default function Hero() {
           className="text-sm sm:text-base md:text-lg text-zinc-400 mb-8 sm:mb-12 px-2 max-w-2xl mx-auto"
         >
           {t(
-            <>Run Claude Code autonomously in a virtual cloud computer.<br />Control everything from Telegram — maximum convenience, maximum safety.</>,
-            <>가상 클라우드 컴퓨터 안에서 Claude Code를 자율적으로 실행하고,<br />텔레그램으로 모든 것을 제어하세요 — 편리함은 극대화, 안전함까지.</>
+            <>Run Claude Code or Codex CLI autonomously in a virtual cloud computer.<br />Control everything from Telegram — maximum convenience, maximum safety.</>,
+            <>가상 클라우드 컴퓨터 안에서 Claude Code 또는 Codex CLI를 자율적으로 실행하고,<br />텔레그램으로 모든 것을 제어하세요 — 편리함은 극대화, 안전함까지.</>
           )}
         </motion.p>
 
@@ -191,6 +191,13 @@ export default function Hero() {
           >
             <Apple className="w-5 h-5" />
             {t('macOS Setup', 'macOS 설정')}
+          </Link>
+          <Link
+            to="/windows"
+            className="inline-flex items-center gap-2 px-6 py-3 sm:px-8 sm:py-4 rounded-lg bg-zinc-800 border border-zinc-600 text-zinc-200 font-bold text-base sm:text-lg hover:bg-zinc-700 shadow-lg shadow-zinc-900/25 transition-all duration-200"
+          >
+            <Monitor className="w-5 h-5" />
+            {t('Windows Setup', 'Windows 설정')}
           </Link>
         </motion.div>
 

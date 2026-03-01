@@ -615,6 +615,17 @@ pub fn is_claude_available() -> bool {
     get_claude_path().is_some()
 }
 
+/// Check if a model string refers to the Claude backend
+pub fn is_claude_model(model: Option<&str>) -> bool {
+    model.map(|m| m == "claude" || m.starts_with("claude:")).unwrap_or(false)
+}
+
+/// Strip "claude:" prefix and return the actual model name.
+/// Returns None if the input is just "claude" (use CLI default).
+pub fn strip_claude_prefix(model: &str) -> Option<&str> {
+    model.strip_prefix("claude:").filter(|s| !s.is_empty())
+}
+
 /// Check if platform supports AI features
 pub fn is_ai_supported() -> bool {
     true

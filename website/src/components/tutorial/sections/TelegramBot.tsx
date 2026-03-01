@@ -268,8 +268,8 @@ export default function TelegramBot() {
           </div>
 
           <TipBox variant="note">
-            모든 플랫폼에서 공통으로 <strong className="text-zinc-300">Claude CLI</strong>가 설치되어 있어야 AI 기능이 동작합니다.
-            Claude CLI가 없으면 Bot 서버는 시작되지만, AI 질문에는 에러가 발생합니다.
+            모든 플랫폼에서 공통으로 <strong className="text-zinc-300">Claude CLI</strong> 또는 <strong className="text-zinc-300">Codex CLI</strong> 중 하나가 설치되어 있어야 AI 기능이 동작합니다.
+            둘 다 없으면 Bot 서버는 시작되지만, AI 질문에는 에러가 발생합니다.
           </TipBox>
 
           {/* 백그라운드 실행 */}
@@ -307,7 +307,7 @@ export default function TelegramBot() {
             {/* /start */}
             <div className="bg-bg-card border border-zinc-800 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
-                <code className="text-accent-cyan font-mono font-semibold">/start [path]</code>
+                <code className="text-accent-cyan font-mono font-semibold">/start [path | name | id]</code>
               </div>
               <p className="text-zinc-400 text-sm leading-relaxed">
                 AI 세션을 시작합니다. <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">path</code>는 작업할 디렉토리 경로입니다.
@@ -319,14 +319,21 @@ export default function TelegramBot() {
                 경로를 몰라도 바로 시작할 수 있습니다.
               </p>
               <p className="text-zinc-400 text-sm leading-relaxed mt-2">
-                <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">~</code> (틸드) 경로도 지원됩니다.
+                <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">~</code> (틸드), <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">.</code>, <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">..</code> 상대 경로도 지원됩니다.
                 예를 들어 <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">/start ~/project</code>는
                 <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">/start /home/user/project</code>로 자동 변환됩니다.
+                지정한 경로가 존재하지 않으면 자동으로 생성됩니다.
+              </p>
+              <p className="text-zinc-400 text-sm leading-relaxed mt-2">
+                Claude Code 세션의 <strong className="text-white">이름</strong>이나 <strong className="text-white">ID</strong>로도 세션을 복원할 수 있습니다.
+                예를 들어 Claude Code에서 세션 이름을 "my-project"로 지정했다면,
+                <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">/start my-project</code>로 해당 세션을 복원합니다.
               </p>
               <div className="bg-bg-elevated rounded p-3 mt-2 space-y-1">
                 <code className="block text-zinc-500 font-mono text-sm">/start</code>
                 <code className="block text-zinc-500 font-mono text-sm">/start ~/mywork</code>
                 <code className="block text-zinc-500 font-mono text-sm">/start /home/user/project</code>
+                <code className="block text-zinc-500 font-mono text-sm">/start my-project</code>
               </div>
             </div>
 
@@ -500,6 +507,38 @@ export default function TelegramBot() {
               </div>
             </div>
 
+            {/* /model */}
+            <div className="bg-bg-card border border-zinc-800 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <code className="text-accent-cyan font-mono font-semibold">/model [name]</code>
+                <span className="text-xs bg-accent-green/20 text-accent-green px-2 py-0.5 rounded-full">ENHANCED</span>
+              </div>
+              <p className="text-zinc-400 text-sm leading-relaxed">
+                AI 모델을 확인하거나 변경합니다.
+                인자 없이 <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">/model</code>만 입력하면
+                현재 모델과 사용 가능한 모델 목록을 보여줍니다.
+              </p>
+              <p className="text-zinc-400 text-sm leading-relaxed mt-2">
+                <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">provider:model</code> 형식으로 지정합니다.
+                provider만 입력하면 해당 provider의 기본 모델이 사용됩니다.
+              </p>
+              <div className="bg-bg-elevated rounded p-3 mt-2 space-y-1">
+                <p className="text-zinc-500 text-xs font-semibold mb-2">Claude</p>
+                <code className="block text-zinc-500 font-mono text-sm">/model claude</code>
+                <code className="block text-zinc-500 font-mono text-sm">/model claude:sonnet</code>
+                <code className="block text-zinc-500 font-mono text-sm">/model claude:opus</code>
+                <code className="block text-zinc-500 font-mono text-sm">/model claude:haiku</code>
+              </div>
+              <div className="bg-bg-elevated rounded p-3 mt-2 space-y-1">
+                <p className="text-zinc-500 text-xs font-semibold mb-2">Codex</p>
+                <code className="block text-zinc-500 font-mono text-sm">/model codex</code>
+                <code className="block text-zinc-500 font-mono text-sm">/model codex:gpt-5.3-codex</code>
+              </div>
+              <p className="text-zinc-400 text-sm leading-relaxed mt-2">
+                provider를 전환하면 (예: claude → codex) 기존 세션에서 빠져나옵니다. 다시 <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">/start</code>로 세션을 시작해야 합니다.
+              </p>
+            </div>
+
             {/* 일반 텍스트 */}
             <div className="bg-bg-card border border-zinc-800 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
@@ -515,7 +554,7 @@ export default function TelegramBot() {
           {/* ========== AI 도구 관리 ========== */}
           <SectionHeading id="telegram-tools" level={3}>AI 도구 관리</SectionHeading>
           <p className="text-zinc-400 mb-4 leading-relaxed">
-            Claude AI가 사용할 수 있는 도구(Tool)를 확인하고 동적으로 추가/제거할 수 있습니다.
+            AI가 사용할 수 있는 도구(Tool)를 확인하고 동적으로 추가/제거할 수 있습니다.
             기본적으로 17개의 도구가 활성화되어 있으며, 필요에 따라 조정할 수 있습니다.
           </p>
 
@@ -1102,8 +1141,8 @@ export default function TelegramBot() {
           </div>
 
           <TipBox variant="note">
-            <strong className="text-zinc-300">Claude CLI</strong> must be installed on all platforms for AI features to work.
-            Without Claude CLI, the Bot server will start but AI queries will return errors.
+            <strong className="text-zinc-300">Claude CLI</strong> or <strong className="text-zinc-300">Codex CLI</strong> must be installed on all platforms for AI features to work.
+            Without either CLI, the Bot server will start but AI queries will return errors.
           </TipBox>
 
           {/* Background execution */}
@@ -1140,7 +1179,7 @@ export default function TelegramBot() {
           <div className="space-y-3 mb-6">
             <div className="bg-bg-card border border-zinc-800 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
-                <code className="text-accent-cyan font-mono font-semibold">/start [path]</code>
+                <code className="text-accent-cyan font-mono font-semibold">/start [path | name | id]</code>
               </div>
               <p className="text-zinc-400 text-sm leading-relaxed">
                 Start an AI session. <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">path</code> is the directory to work in.
@@ -1153,14 +1192,21 @@ export default function TelegramBot() {
                 You can get started immediately without specifying a directory.
               </p>
               <p className="text-zinc-400 text-sm leading-relaxed mt-2">
-                <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">~</code> (tilde) paths are supported.
+                <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">~</code> (tilde), <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">.</code>, <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">..</code> relative paths are supported.
                 For example, <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">/start ~/project</code> is automatically
                 expanded to <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">/start /home/user/project</code>.
+                If the specified path doesn't exist, it will be created automatically.
+              </p>
+              <p className="text-zinc-400 text-sm leading-relaxed mt-2">
+                You can also resume a session by its Claude Code session <strong className="text-white">name</strong> or <strong className="text-white">ID</strong>.
+                For example, if you named a session "my-project" in Claude Code,
+                <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">/start my-project</code> will restore that session.
               </p>
               <div className="bg-bg-elevated rounded p-3 mt-2 space-y-1">
                 <code className="block text-zinc-500 font-mono text-sm">/start</code>
                 <code className="block text-zinc-500 font-mono text-sm">/start ~/mywork</code>
                 <code className="block text-zinc-500 font-mono text-sm">/start /home/user/project</code>
+                <code className="block text-zinc-500 font-mono text-sm">/start my-project</code>
               </div>
             </div>
 
@@ -1329,6 +1375,38 @@ export default function TelegramBot() {
               </div>
             </div>
 
+            {/* /model */}
+            <div className="bg-bg-card border border-zinc-800 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <code className="text-accent-cyan font-mono font-semibold">/model [name]</code>
+                <span className="text-xs bg-accent-green/20 text-accent-green px-2 py-0.5 rounded-full">ENHANCED</span>
+              </div>
+              <p className="text-zinc-400 text-sm leading-relaxed">
+                Check or change the AI model.
+                Type <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">/model</code> without arguments to see
+                the current model and a list of available models.
+              </p>
+              <p className="text-zinc-400 text-sm leading-relaxed mt-2">
+                Use the <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">provider:model</code> format.
+                If only the provider is specified, the default model for that provider is used.
+              </p>
+              <div className="bg-bg-elevated rounded p-3 mt-2 space-y-1">
+                <p className="text-zinc-500 text-xs font-semibold mb-2">Claude</p>
+                <code className="block text-zinc-500 font-mono text-sm">/model claude</code>
+                <code className="block text-zinc-500 font-mono text-sm">/model claude:sonnet</code>
+                <code className="block text-zinc-500 font-mono text-sm">/model claude:opus</code>
+                <code className="block text-zinc-500 font-mono text-sm">/model claude:haiku</code>
+              </div>
+              <div className="bg-bg-elevated rounded p-3 mt-2 space-y-1">
+                <p className="text-zinc-500 text-xs font-semibold mb-2">Codex</p>
+                <code className="block text-zinc-500 font-mono text-sm">/model codex</code>
+                <code className="block text-zinc-500 font-mono text-sm">/model codex:gpt-5.3-codex</code>
+              </div>
+              <p className="text-zinc-400 text-sm leading-relaxed mt-2">
+                Switching providers (e.g., claude → codex) will exit the current session. You'll need to run <code className="text-zinc-300 font-mono bg-bg-elevated px-1 py-0.5 rounded">/start</code> again to begin a new session.
+              </p>
+            </div>
+
             <div className="bg-bg-card border border-zinc-800 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-accent-cyan font-semibold">General Text</span>
@@ -1343,7 +1421,7 @@ export default function TelegramBot() {
           {/* ========== Tool Management ========== */}
           <SectionHeading id="telegram-tools" level={3}>AI Tool Management</SectionHeading>
           <p className="text-zinc-400 mb-4 leading-relaxed">
-            You can view and dynamically add or remove the tools available to Claude AI.
+            You can view and dynamically add or remove the tools available to the AI.
             By default, 17 tools are enabled. Adjust them as needed for your workflow or security requirements.
           </p>
 

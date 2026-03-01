@@ -175,7 +175,7 @@ export default function AIShowcase() {
               className="pt-4"
             >
               <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent-purple/10 border border-accent-purple/20 text-sm text-accent-purple">
-                Powered by Claude AI
+                Powered by Claude & Codex
               </span>
             </motion.div>
           </div>

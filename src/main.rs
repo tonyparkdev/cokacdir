@@ -21,6 +21,7 @@ use ratatui::{
 
 use crate::ui::app::{App, Screen};
 use crate::services::claude;
+use crate::services::codex;
 use crate::utils::markdown::{render_markdown, MarkdownTheme, is_line_empty};
 use crate::keybindings::PanelAction;
 
@@ -493,6 +494,20 @@ fn handle_ccserver(tokens: Vec<String>) {
     println!("  ┌{}┐", "─".repeat(width));
     println!("  │{}│", title);
     println!("  └{}┘", "─".repeat(width));
+    println!();
+
+    // Check provider availability
+    let has_claude = claude::is_claude_available();
+    let has_codex = codex::is_codex_available();
+    let mark = |available: bool| if available { "✓" } else { "✗" };
+    println!("  ▸ Providers    : claude {}  codex {}", mark(has_claude), mark(has_codex));
+
+    if !has_claude && !has_codex {
+        eprintln!();
+        eprintln!("  Error: No AI provider available.");
+        eprintln!("  Install Claude CLI (https://claude.ai/cli) or Codex CLI.");
+        return;
+    }
     println!();
 
     if tokens.len() == 1 {

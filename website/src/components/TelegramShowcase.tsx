@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Send, Terminal, FileUp, Bot, Wrench, Smartphone, Cloud, Apple, Activity, Hand, Layers, ShieldCheck, Zap } from 'lucide-react'
+import { Send, Terminal, FileUp, Bot, Wrench, Smartphone, Cloud, Apple, Monitor, Activity, Hand, Layers, ShieldCheck, Zap } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useLanguage } from './tutorial/LanguageContext'
 
@@ -91,10 +91,10 @@ export default function TelegramShowcase() {
   const features = [
     {
       icon: Bot,
-      title: t('Claude AI in Your Pocket', '주머니 속 Claude AI'),
+      title: t('AI in Your Pocket', '주머니 속 AI'),
       desc: t(
-        'Chat with Claude AI through Telegram. Ask questions, generate code, analyze files — all from your phone.',
-        '텔레그램으로 Claude AI와 대화하세요. 질문, 코드 생성, 파일 분석 — 모두 폰에서.'
+        'Chat with Claude or Codex through Telegram. Ask questions, generate code, analyze files — all from your phone.',
+        '텔레그램으로 Claude 또는 Codex와 대화하세요. 질문, 코드 생성, 파일 분석 — 모두 폰에서.'
       ),
     },
     {
@@ -117,16 +117,16 @@ export default function TelegramShowcase() {
       icon: Wrench,
       title: t('Dynamic Tool Control', '동적 도구 제어'),
       desc: t(
-        'Add or remove AI tools on the fly. Fine-tune what Claude can do for security or workflow needs.',
-        'AI 도구를 즉석에서 추가/제거하세요. 보안이나 워크플로우에 맞게 Claude 권한을 세밀하게 조정.'
+        'Add or remove AI tools on the fly. Fine-tune what the AI can do for security or workflow needs.',
+        'AI 도구를 즉석에서 추가/제거하세요. 보안이나 워크플로우에 맞게 AI 권한을 세밀하게 조정.'
       ),
     },
     {
       icon: Activity,
       title: t('Real-time Progress', '실시간 진행 상황'),
       desc: t(
-        'Watch your tasks progress in real time. See exactly what Claude is doing as it works through your request.',
-        '작업 진행 과정을 실시간으로 확인하세요. Claude가 요청을 처리하는 모습을 그대로 볼 수 있습니다.'
+        'Watch your tasks progress in real time. See exactly what the AI is doing as it works through your request.',
+        '작업 진행 과정을 실시간으로 확인하세요. AI가 요청을 처리하는 모습을 그대로 볼 수 있습니다.'
       ),
     },
     {
@@ -176,14 +176,14 @@ export default function TelegramShowcase() {
           </div>
           <h2 className="text-3xl sm:text-4xl font-bold mb-4">
             {t(
-              <>Control <span className="text-accent-cyan">Claude Code</span> from Your Phone</>,
-              <>폰에서 <span className="text-accent-cyan">Claude Code</span>를 제어하세요</>
+              <>Control <span className="text-accent-cyan">Your AI Agent</span> from Your Phone</>,
+              <>폰에서 <span className="text-accent-cyan">AI 에이전트</span>를 제어하세요</>
             )}
           </h2>
           <p className="text-zinc-400 text-sm sm:text-lg max-w-2xl mx-auto">
             {t(
-              'Run a Telegram bot on your server and get full Claude AI access anywhere. Execute commands, transfer files, and manage projects — all from a chat.',
-              '서버에서 텔레그램 봇을 실행하고 어디서든 Claude AI에 접근하세요. 명령 실행, 파일 전송, 프로젝트 관리 — 모두 채팅으로.'
+              'Run a Telegram bot on your server and get full AI access anywhere. Claude or Codex — execute commands, transfer files, and manage projects — all from a chat.',
+              '서버에서 텔레그램 봇을 실행하고 어디서든 AI에 접근하세요. Claude 또는 Codex — 명령 실행, 파일 전송, 프로젝트 관리 — 모두 채팅으로.'
             )}
           </p>
         </motion.div>
@@ -254,11 +254,7 @@ export default function TelegramShowcase() {
               {t('See Workflows', '워크플로우 보기')}
             </Link>
             <Link
-              to="/tutorial"
-              onClick={() => setTimeout(() => {
-                const el = document.getElementById('telegram-bot')
-                if (el) el.scrollIntoView({ behavior: 'smooth' })
-              }, 100)}
+              to="/telegram-tutorial"
               className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-accent-cyan/10 border border-accent-cyan/30 text-accent-cyan font-semibold hover:bg-accent-cyan/20 transition-colors"
             >
               <Send className="w-4 h-4" />
@@ -277,6 +273,13 @@ export default function TelegramShowcase() {
             >
               <Apple className="w-4 h-4" />
               {t('macOS Setup Guide', 'macOS 설정 가이드')}
+            </Link>
+            <Link
+              to="/windows"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 font-semibold hover:bg-zinc-700 transition-colors"
+            >
+              <Monitor className="w-4 h-4" />
+              {t('Windows Setup Guide', 'Windows 설정 가이드')}
             </Link>
           </div>
         </motion.div>

@@ -21,12 +21,16 @@ export default function AICommands() {
 
           <SectionHeading id="ai-setup" level={3}>AI 기능 사전 준비</SectionHeading>
           <p className="text-zinc-400 mb-4">
-            AI 기능을 사용하려면 <strong className="text-white">Claude Code</strong>라는 프로그램이 먼저 설치되어 있어야 합니다.
+            AI 기능을 사용하려면 <strong className="text-white">Claude Code</strong> 또는 <strong className="text-white">Codex CLI</strong> 중 하나가 설치되어 있어야 합니다.
             아래 명령어로 설치할 수 있습니다:
           </p>
           <div className="bg-bg-card border border-zinc-800 rounded-lg p-4 mb-4 font-mono text-sm">
+            <div className="text-zinc-500 text-xs mb-1"># Claude Code</div>
             <span className="text-zinc-500">$ </span>
             <span className="text-accent-cyan">npm install -g @anthropic-ai/claude-code</span>
+            <div className="text-zinc-500 text-xs mt-3 mb-1"># Codex CLI</div>
+            <span className="text-zinc-500">$ </span>
+            <span className="text-accent-cyan">npm install -g @openai/codex</span>
           </div>
           <p className="text-zinc-400 mb-6 text-sm">
             npm이 없다면 먼저 Node.js를 설치해야 합니다.
@@ -140,12 +144,16 @@ export default function AICommands() {
 
           <SectionHeading id="ai-setup" level={3}>Prerequisites</SectionHeading>
           <p className="text-zinc-400 mb-4">
-            To use the AI feature, you need <strong className="text-white">Claude Code</strong> installed first.
-            Install it with this command:
+            To use the AI feature, you need <strong className="text-white">Claude Code</strong> or <strong className="text-white">Codex CLI</strong> installed first.
+            Install either one with these commands:
           </p>
           <div className="bg-bg-card border border-zinc-800 rounded-lg p-4 mb-4 font-mono text-sm">
+            <div className="text-zinc-500 text-xs mb-1"># Claude Code</div>
             <span className="text-zinc-500">$ </span>
             <span className="text-accent-cyan">npm install -g @anthropic-ai/claude-code</span>
+            <div className="text-zinc-500 text-xs mt-3 mb-1"># Codex CLI</div>
+            <span className="text-zinc-500">$ </span>
+            <span className="text-accent-cyan">npm install -g @openai/codex</span>
           </div>
           <p className="text-zinc-400 mb-6 text-sm">
             If you don't have npm, install Node.js first from

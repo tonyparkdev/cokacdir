@@ -1,4 +1,4 @@
-import { Github, Youtube, FileText, Cpu, GraduationCap, Cloud, Apple, Zap } from 'lucide-react'
+import { Github, Youtube, FileText, Cpu, GraduationCap, Cloud, Apple, Monitor, Zap, Send } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useLanguage } from './tutorial/LanguageContext'
 
@@ -54,6 +54,13 @@ export default function Footer() {
               <span className="text-sm">{t('Tutorial', '튜토리얼')}</span>
             </Link>
             <Link
+              to="/telegram-tutorial"
+              className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors"
+            >
+              <Send className="w-5 h-5" />
+              <span className="text-sm">{t('Bot Tutorial', '봇 튜토리얼')}</span>
+            </Link>
+            <Link
               to="/ec2"
               className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors"
             >
@@ -66,6 +73,13 @@ export default function Footer() {
             >
               <Apple className="w-5 h-5" />
               <span className="text-sm">{t('macOS Setup', 'macOS 설정')}</span>
+            </Link>
+            <Link
+              to="/windows"
+              className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors"
+            >
+              <Monitor className="w-5 h-5" />
+              <span className="text-sm">{t('Windows Setup', 'Windows 설정')}</span>
             </Link>
             <a
               href="https://github.com/kstost/cokacdir/blob/main/LICENSE"

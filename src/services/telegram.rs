@@ -11,6 +11,7 @@ use teloxide::types::ParseMode;
 use sha2::{Sha256, Digest};
 
 use crate::services::claude::{self, CancelToken, StreamMessage, DEFAULT_ALLOWED_TOOLS};
+use crate::services::codex;
 use crate::ui::ai_screen::{self, HistoryItem, HistoryType, SessionData};
 
 /// Global debug log flag for Telegram API calls
@@ -72,7 +73,7 @@ struct BotSettings {
     owner_user_id: Option<u64>,
     /// chat_id (string) → true if group chat is public (non-owner users allowed)
     as_public_for_group_chat: HashMap<String, bool>,
-    /// chat_id (string) → model name (e.g. "sonnet", "opus", "haiku")
+    /// chat_id (string) → model name (e.g. "claude", "claude:claude-sonnet-4-6", "codex:gpt-5.3-codex")
     models: HashMap<String, String>,
     /// Debug logging toggle
     debug: bool,
@@ -101,9 +102,16 @@ fn get_allowed_tools(settings: &BotSettings, chat_id: ChatId) -> Vec<String> {
 }
 
 /// Get the configured model for a specific chat_id, if any.
+/// Migrates legacy bare names (e.g. "sonnet") to "claude:" prefixed format.
 fn get_model(settings: &BotSettings, chat_id: ChatId) -> Option<String> {
     let key = chat_id.0.to_string();
-    settings.models.get(&key).cloned()
+    settings.models.get(&key).map(|m| {
+        match m.as_str() {
+            "sonnet" | "opus" | "haiku" |
+            "sonnet[1m]" | "opus[1m]" | "haiku[1m]" => format!("claude:{}", m),
+            _ => m.clone(),
+        }
+    })
 }
 
 /// Schedule entry persisted as JSON in ~/.cokacdir/schedule/
@@ -131,6 +139,10 @@ fn schedule_dir() -> Option<std::path::PathBuf> {
 
 fn sched_debug(msg: &str) {
     crate::services::claude::debug_log_to("cron.log", msg);
+}
+
+fn msg_debug(msg: &str) {
+    crate::services::claude::debug_log_to("msg.log", msg);
 }
 
 /// Read a single schedule entry from a JSON file
@@ -1013,7 +1025,15 @@ async fn handle_message(
         if !data.sessions.contains_key(&chat_id) {
             if let Some(last_path) = data.settings.last_sessions.get(&chat_id.0.to_string()).cloned() {
                 if Path::new(&last_path).is_dir() {
-                    let existing = load_existing_session(&last_path);
+                    let auto_model = get_model(&data.settings, chat_id);
+                    let auto_provider = if auto_model.is_some() {
+                        if codex::is_codex_model(auto_model.as_deref()) { "codex" } else { "claude" }
+                    } else if !claude::is_claude_available() && codex::is_codex_available() {
+                        "codex"
+                    } else {
+                        "claude"
+                    };
+                    let existing = load_existing_session(&last_path, auto_provider);
                     let session = data.sessions.entry(chat_id).or_insert_with(|| ChatSession {
                         session_id: None,
                         current_path: None,
@@ -1125,6 +1145,7 @@ Manage server files &amp; chat with Claude AI.
 
 <b>Session</b>
 <code>/start &lt;path&gt;</code> — Start session at directory
+<code>/start &lt;name|id&gt;</code> — Resume Claude Code session
 <code>/start</code> — Start with auto-generated workspace
 <code>/pwd</code> — Show current working directory
 <code>/clear</code> — Clear AI conversation history
@@ -1160,7 +1181,7 @@ Ask in natural language to manage schedules.
 
 <b>Settings</b>
 <code>/model</code> — Show current AI model
-<code>/model &lt;name&gt;</code> — Set model (sonnet/opus/haiku/sonnet[1m]/opus[1m]/haiku[1m])
+<code>/model &lt;name&gt;</code> — Set model (claude/claude:model/codex/codex:model)
 <code>/setpollingtime &lt;ms&gt;</code> — Set API polling interval
   Too low may cause Telegram API rate limits.
   Minimum 2500ms, recommended 3000ms+.
@@ -1186,6 +1207,28 @@ async fn handle_start_command(
 ) -> ResponseResult<()> {
     // Extract path from "/start <path>"
     let path_str = text.strip_prefix("/start").unwrap_or("").trim();
+    msg_debug(&format!("[handle_start_command] chat_id={}, path_str={:?}", chat_id.0, path_str));
+
+    // Determine current provider (Claude vs Codex)
+    let provider = {
+        let data = state.lock().await;
+        let model = get_model(&data.settings, chat_id);
+        let use_codex = if model.is_some() {
+            codex::is_codex_model(model.as_deref())
+        } else {
+            !claude::is_claude_available() && codex::is_codex_available()
+        };
+        msg_debug(&format!("[handle_start_command] model={:?}, use_codex={}", model, use_codex));
+        if use_codex {
+            SessionProvider::Codex
+        } else {
+            SessionProvider::Claude
+        }
+    };
+    let provider_str = match provider {
+        SessionProvider::Claude => "claude",
+        SessionProvider::Codex => "codex",
+    };
 
     let canonical_path = if path_str.is_empty() {
         // Create random workspace directory
@@ -1210,8 +1253,14 @@ async fn handle_start_command(
             return Ok(());
         }
         new_dir.display().to_string()
-    } else {
-        // Expand ~ to home directory
+    } else if path_str.starts_with('/')
+        || path_str.starts_with("~/") || path_str.starts_with("~\\") || path_str == "~"
+        || path_str.starts_with("./") || path_str.starts_with(".\\")
+        || path_str == "." || path_str == ".."
+        || path_str.starts_with("../") || path_str.starts_with("..\\")
+        || (path_str.len() >= 3 && path_str.as_bytes()[1] == b':' && (path_str.as_bytes()[2] == b'\\' || path_str.as_bytes()[2] == b'/'))
+    {
+        // Path mode: expand ~ and validate
         let expanded = if path_str.starts_with("~/") || path_str.starts_with("~\\") || path_str == "~" {
             if let Some(home) = dirs::home_dir() {
                 home.join(path_str.strip_prefix("~/").or_else(|| path_str.strip_prefix("~\\")).unwrap_or("")).display().to_string()
@@ -1221,11 +1270,17 @@ async fn handle_start_command(
         } else {
             path_str.to_string()
         };
-        // Validate path exists
         let path = Path::new(&expanded);
-        if !path.exists() || !path.is_dir() {
+        if !path.exists() {
+            if let Err(e) = fs::create_dir_all(&path) {
+                shared_rate_limit_wait(state, chat_id).await;
+                tg!("send_message", bot.send_message(chat_id, format!("Error: failed to create '{}': {}", expanded, e))
+                    .await)?;
+                return Ok(());
+            }
+        } else if !path.is_dir() {
             shared_rate_limit_wait(state, chat_id).await;
-            tg!("send_message", bot.send_message(chat_id, format!("Error: '{}' is not a valid directory.", expanded))
+            tg!("send_message", bot.send_message(chat_id, format!("Error: '{}' is not a directory.", expanded))
                 .await)?;
             return Ok(());
         }
@@ -1233,10 +1288,74 @@ async fn handle_start_command(
             .map(crate::utils::format::strip_unc_prefix)
             .map(|p| p.display().to_string())
             .unwrap_or_else(|_| expanded)
+    } else {
+        // Session name/ID mode: resolve Claude Code session
+        match resolve_session(path_str, provider) {
+            Some(info) => {
+                let path = Path::new(&info.cwd);
+                if path.is_dir() {
+                    let canonical = path.canonicalize()
+                        .map(crate::utils::format::strip_unc_prefix)
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_else(|_| info.cwd.clone());
+                    convert_and_save_session(&info, &canonical);
+                    canonical
+                } else {
+                    shared_rate_limit_wait(state, chat_id).await;
+                    tg!("send_message", bot.send_message(chat_id, format!("Error: session directory '{}' no longer exists.", info.cwd))
+                        .await)?;
+                    return Ok(());
+                }
+            }
+            None => {
+                // Fallback 1: try ai_sessions/{id}.json (cokacdir internal sessions)
+                let internal = ai_screen::ai_sessions_dir().and_then(|dir| {
+                    let file = dir.join(format!("{}.json", path_str));
+                    let content = fs::read_to_string(&file).ok()?;
+                    let sd: SessionData = serde_json::from_str(&content).ok()?;
+                    // Provider filter
+                    if !sd.provider.is_empty() && sd.provider != provider_str {
+                        msg_debug(&format!("[handle_start_command] ai_sessions/{}.json provider mismatch: {} != {}", path_str, sd.provider, provider_str));
+                        return None;
+                    }
+                    let p = Path::new(&sd.current_path);
+                    if p.is_dir() { Some(sd.current_path.clone()) } else { None }
+                });
+                if let Some(cp) = internal {
+                    msg_debug(&format!("[handle_start_command] resolved from ai_sessions: id={}, path={}", path_str, cp));
+                    cp
+                } else {
+                    // Fallback 2: try as plain path
+                    let path = Path::new(path_str);
+                    if path.exists() && path.is_dir() {
+                        path.canonicalize()
+                            .map(crate::utils::format::strip_unc_prefix)
+                            .map(|p| p.display().to_string())
+                            .unwrap_or_else(|_| path_str.to_string())
+                    } else {
+                        shared_rate_limit_wait(state, chat_id).await;
+                        tg!("send_message", bot.send_message(chat_id, format!("Error: no session or directory found for '{}'.", path_str))
+                            .await)?;
+                        return Ok(());
+                    }
+                }
+            }
+        }
     };
 
     // Try to load existing session for this path
-    let existing = load_existing_session(&canonical_path);
+    msg_debug(&format!("[handle_start_command] provider={}", provider_str));
+    let existing = load_existing_session(&canonical_path, provider_str);
+
+    // If no local session, try converting the latest external session for this path
+    let existing = if existing.is_some() {
+        existing
+    } else if let Some(info) = find_latest_session_by_cwd(&canonical_path, provider) {
+        convert_and_save_session(&info, &canonical_path);
+        load_existing_session(&canonical_path, provider_str)
+    } else {
+        None
+    };
 
     let mut response_lines = Vec::new();
 
@@ -1254,12 +1373,18 @@ async fn handle_start_command(
             session.session_id = Some(session_data.session_id.clone());
             session.current_path = Some(canonical_path.clone());
             session.history = session_data.history.clone();
+            msg_debug(&format!("[handle_start_command] restored: session_id={}, path={}, history_len={}",
+                session_data.session_id, canonical_path, session_data.history.len()));
 
             let ts = chrono::Local::now().format("%H:%M:%S");
             println!("  [{ts}] ▶ Session restored: {canonical_path}");
-            response_lines.push(format!("Session restored at `{}`.", canonical_path));
+            response_lines.push(format!("[{}] Session restored at `{}`.", provider_str, canonical_path));
             if let Some(folder_name) = std::path::Path::new(&canonical_path).file_name().and_then(|n| n.to_str()) {
-                if is_workspace_id(folder_name) {
+                if is_workspace_id(folder_name)
+                    && dirs::home_dir()
+                        .map(|h| h.join(".cokacdir").join("workspace").join(folder_name).is_dir())
+                        .unwrap_or(false)
+                {
                     response_lines.push(format!("Use /{} to resume this session.", folder_name));
                 }
             }
@@ -1274,13 +1399,18 @@ async fn handle_start_command(
             session.session_id = None;
             session.current_path = Some(canonical_path.clone());
             session.history.clear();
+            msg_debug(&format!("[handle_start_command] new session: path={}", canonical_path));
 
             let ts = chrono::Local::now().format("%H:%M:%S");
             println!("  [{ts}] ▶ Session started: {canonical_path}");
-            response_lines.push(format!("Session started at `{}`.", canonical_path));
+            response_lines.push(format!("[{}] Session started at `{}`.", provider_str, canonical_path));
             // Show workspace ID shortcut if this is a workspace directory
             if let Some(folder_name) = std::path::Path::new(&canonical_path).file_name().and_then(|n| n.to_str()) {
-                if is_workspace_id(folder_name) {
+                if is_workspace_id(folder_name)
+                    && dirs::home_dir()
+                        .map(|h| h.join(".cokacdir").join("workspace").join(folder_name).is_dir())
+                        .unwrap_or(false)
+                {
                     response_lines.push(format!("Use /{} to resume this session.", folder_name));
                 }
             }
@@ -1345,6 +1475,506 @@ fn is_workspace_id(s: &str) -> bool {
     s.len() == 8 && s.chars().all(|c| c.is_ascii_alphanumeric())
 }
 
+/// Check if a string is a valid UUID (8-4-4-4-12 hex format)
+fn is_uuid(s: &str) -> bool {
+    if s.len() != 36 { return false; }
+    let parts: Vec<&str> = s.split('-').collect();
+    if parts.len() != 5 { return false; }
+    let expected = [8, 4, 4, 4, 12];
+    parts.iter().zip(expected.iter()).all(|(p, &len)| {
+        p.len() == len && p.chars().all(|c| c.is_ascii_hexdigit())
+    })
+}
+
+/// Provider that owns the resolved session.
+#[derive(Clone, Copy)]
+enum SessionProvider { Claude, Codex }
+
+/// Info returned when an external session is resolved.
+struct ResolvedSession {
+    cwd: String,
+    jsonl_path: std::path::PathBuf,
+    session_id: String,
+    provider: SessionProvider,
+}
+
+/// Resolve a session by name or ID, scoped to the current provider.
+fn resolve_session(query: &str, provider: SessionProvider) -> Option<ResolvedSession> {
+    match provider {
+        SessionProvider::Claude => {
+            if is_uuid(query) {
+                resolve_claude_by_id(query).or_else(|| resolve_claude_by_name(query))
+            } else {
+                resolve_claude_by_name(query).or_else(|| resolve_claude_by_id(query))
+            }
+        }
+        SessionProvider::Codex => {
+            // Codex has no session naming — ID only
+            resolve_codex_by_id(query)
+        }
+    }
+}
+
+/// Claude: find `~/.claude/projects/*/{session_id}.jsonl`.
+fn resolve_claude_by_id(session_id: &str) -> Option<ResolvedSession> {
+    let projects_dir = dirs::home_dir()?.join(".claude").join("projects");
+    if !projects_dir.is_dir() { return None; }
+    let filename = format!("{}.jsonl", session_id);
+    for entry in fs::read_dir(&projects_dir).ok()?.flatten() {
+        if !entry.file_type().map_or(false, |t| t.is_dir()) { continue; }
+        let jsonl_path = entry.path().join(&filename);
+        if jsonl_path.exists() {
+            let cwd = extract_cwd_from_jsonl(&jsonl_path)?;
+            return Some(ResolvedSession {
+                cwd, jsonl_path,
+                session_id: session_id.to_string(),
+                provider: SessionProvider::Claude,
+            });
+        }
+    }
+    None
+}
+
+/// Claude: scan `~/.claude/projects/*/*.jsonl` for matching `custom-title`.
+fn resolve_claude_by_name(name: &str) -> Option<ResolvedSession> {
+    let projects_dir = dirs::home_dir()?.join(".claude").join("projects");
+    if !projects_dir.is_dir() { return None; }
+    let name_lower = name.to_lowercase();
+    for proj_entry in fs::read_dir(&projects_dir).ok()?.flatten() {
+        if !proj_entry.file_type().map_or(false, |t| t.is_dir()) { continue; }
+        let Ok(file_entries) = fs::read_dir(proj_entry.path()) else { continue; };
+        for file_entry in file_entries.flatten() {
+            let path = file_entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("jsonl") { continue; }
+            if let Some(info) = find_session_by_title(&path, &name_lower) {
+                return Some(info);
+            }
+        }
+    }
+    None
+}
+
+/// Claude: check if a JSONL file contains a matching custom-title.
+fn find_session_by_title(path: &Path, name_lower: &str) -> Option<ResolvedSession> {
+    use std::io::{BufRead, BufReader};
+    let file = fs::File::open(path).ok()?;
+    let reader = BufReader::new(file);
+    let mut matched = false;
+    let mut cwd_found: Option<String> = None;
+    for line in reader.lines().flatten() {
+        if cwd_found.is_none() && line.contains("\"cwd\"") {
+            if let Some(cwd) = extract_json_string_field(&line, "cwd") {
+                if !cwd.is_empty() {
+                    cwd_found = Some(cwd);
+                }
+            }
+        }
+        if !matched && line.contains("custom-title") {
+            if let Some(title) = extract_json_string_field(&line, "customTitle") {
+                if title.to_lowercase() == name_lower {
+                    matched = true;
+                }
+            }
+        }
+        if matched && cwd_found.is_some() { break; }
+    }
+    if matched {
+        let cwd = cwd_found?;
+        let session_id = path.file_stem()?.to_str()?.to_string();
+        Some(ResolvedSession {
+            cwd, jsonl_path: path.to_path_buf(), session_id,
+            provider: SessionProvider::Claude,
+        })
+    } else {
+        None
+    }
+}
+
+/// Codex: recursively scan `~/.codex/sessions/` for a JSONL whose filename contains the UUID.
+fn resolve_codex_by_id(session_id: &str) -> Option<ResolvedSession> {
+    let sessions_dir = dirs::home_dir()?.join(".codex").join("sessions");
+    if !sessions_dir.is_dir() { return None; }
+    let suffix = format!("{}.jsonl", session_id);
+    fn walk(dir: &Path, suffix: &str) -> Option<std::path::PathBuf> {
+        for entry in fs::read_dir(dir).ok()?.flatten() {
+            let Ok(ft) = entry.file_type() else { continue; };
+            if ft.is_dir() {
+                if let Some(found) = walk(&entry.path(), suffix) {
+                    return Some(found);
+                }
+            } else if ft.is_file() {
+                if let Some(name) = entry.file_name().to_str() {
+                    if name.ends_with(suffix) {
+                        return Some(entry.path());
+                    }
+                }
+            }
+        }
+        None
+    }
+    let jsonl_path = walk(&sessions_dir, &suffix)?;
+    let cwd = extract_cwd_from_jsonl(&jsonl_path)?;
+    Some(ResolvedSession {
+        cwd, jsonl_path,
+        session_id: session_id.to_string(),
+        provider: SessionProvider::Codex,
+    })
+}
+
+/// Convert an external JSONL session to cokacdir SessionData and save it.
+/// Re-converts if the source JSONL is newer than the existing JSON.
+fn convert_and_save_session(info: &ResolvedSession, canonical_path: &str) {
+    let Some(sessions_dir) = ai_screen::ai_sessions_dir() else { return; };
+    let target = sessions_dir.join(format!("{}.json", info.session_id));
+    if target.exists() {
+        // Skip if target is up-to-date (source JSONL not newer than target JSON)
+        let source_mtime = info.jsonl_path.metadata().ok().and_then(|m| m.modified().ok());
+        let target_mtime = target.metadata().ok().and_then(|m| m.modified().ok());
+        if let (Some(src), Some(tgt)) = (source_mtime, target_mtime) {
+            if src <= tgt { return; }
+        } else {
+            return;
+        }
+    }
+
+    let parser = match info.provider {
+        SessionProvider::Claude => parse_claude_jsonl,
+        SessionProvider::Codex  => parse_codex_jsonl,
+    };
+    let Some(session_data) = parser(&info.jsonl_path, &info.session_id, canonical_path) else { return; };
+    let _ = fs::create_dir_all(&sessions_dir);
+    if let Ok(json) = serde_json::to_string_pretty(&session_data) {
+        let _ = fs::write(target, json);
+    }
+}
+
+/// Find the most recently modified external session whose cwd matches the given path.
+fn find_latest_session_by_cwd(canonical_path: &str, provider: SessionProvider) -> Option<ResolvedSession> {
+    match provider {
+        SessionProvider::Claude => find_latest_claude_by_cwd(canonical_path),
+        SessionProvider::Codex  => find_latest_codex_by_cwd(canonical_path),
+    }
+}
+
+/// Claude: scan all `~/.claude/projects/*/*.jsonl` for the latest session matching cwd.
+fn find_latest_claude_by_cwd(canonical_path: &str) -> Option<ResolvedSession> {
+    let projects_dir = dirs::home_dir()?.join(".claude").join("projects");
+    if !projects_dir.is_dir() { return None; }
+    let mut best_path: Option<std::path::PathBuf> = None;
+    let mut best_time = std::time::UNIX_EPOCH;
+    for proj_entry in fs::read_dir(&projects_dir).ok()?.flatten() {
+        if !proj_entry.file_type().map_or(false, |t| t.is_dir()) { continue; }
+        let Ok(file_entries) = fs::read_dir(proj_entry.path()) else { continue; };
+        for file_entry in file_entries.flatten() {
+            let path = file_entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("jsonl") { continue; }
+            if let Some(cwd) = extract_cwd_from_jsonl(&path) {
+                if cwd == canonical_path {
+                    let mtime = path.metadata().ok()
+                        .and_then(|m| m.modified().ok())
+                        .unwrap_or(std::time::UNIX_EPOCH);
+                    if mtime > best_time {
+                        best_path = Some(path);
+                        best_time = mtime;
+                    }
+                }
+            }
+        }
+    }
+    let jsonl_path = best_path?;
+    let session_id = jsonl_path.file_stem()?.to_str()?.to_string();
+    Some(ResolvedSession {
+        cwd: canonical_path.to_string(), jsonl_path, session_id,
+        provider: SessionProvider::Claude,
+    })
+}
+
+/// Codex: scan `~/.codex/sessions/**/*.jsonl` for the latest session matching cwd.
+fn find_latest_codex_by_cwd(canonical_path: &str) -> Option<ResolvedSession> {
+    let sessions_dir = dirs::home_dir()?.join(".codex").join("sessions");
+    if !sessions_dir.is_dir() { return None; }
+    let mut best_path: Option<std::path::PathBuf> = None;
+    let mut best_time = std::time::UNIX_EPOCH;
+    collect_best_codex_jsonl(&sessions_dir, canonical_path, &mut best_path, &mut best_time);
+    let jsonl_path = best_path?;
+    // Extract UUID from filename tail (last 36 chars of stem)
+    let session_id = {
+        let stem = jsonl_path.file_stem()?.to_str()?;
+        if stem.len() < 36 { return None; }
+        let candidate = &stem[stem.len() - 36..];
+        if !is_uuid(candidate) { return None; }
+        candidate.to_string()
+    };
+    Some(ResolvedSession {
+        cwd: canonical_path.to_string(), jsonl_path, session_id,
+        provider: SessionProvider::Codex,
+    })
+}
+
+fn collect_best_codex_jsonl(
+    dir: &Path, canonical_path: &str,
+    best_path: &mut Option<std::path::PathBuf>, best_time: &mut std::time::SystemTime,
+) {
+    let Ok(entries) = fs::read_dir(dir) else { return; };
+    for entry in entries.flatten() {
+        let Ok(ft) = entry.file_type() else { continue; };
+        if ft.is_dir() {
+            collect_best_codex_jsonl(&entry.path(), canonical_path, best_path, best_time);
+        } else if ft.is_file() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("jsonl") { continue; }
+            if let Some(cwd) = extract_cwd_from_jsonl(&path) {
+                if cwd == canonical_path {
+                    let mtime = path.metadata().ok()
+                        .and_then(|m| m.modified().ok())
+                        .unwrap_or(std::time::UNIX_EPOCH);
+                    if mtime > *best_time {
+                        *best_path = Some(path);
+                        *best_time = mtime;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Parse a Claude Code JSONL file into cokacdir SessionData.
+fn parse_claude_jsonl(jsonl_path: &Path, session_id: &str, cwd: &str) -> Option<SessionData> {
+    use std::io::{BufRead, BufReader};
+    let file = fs::File::open(jsonl_path).ok()?;
+    let reader = BufReader::new(file);
+    let mut history: Vec<HistoryItem> = Vec::new();
+
+    for line in reader.lines().flatten() {
+        let Ok(val) = serde_json::from_str::<serde_json::Value>(&line) else { continue };
+        // Skip sidechain (alternative conversation branches)
+        if val.get("isSidechain").and_then(|v| v.as_bool()) == Some(true) { continue; }
+
+        let Some(msg_type) = val.get("type").and_then(|v| v.as_str()) else { continue };
+
+        match msg_type {
+            "user" => {
+                let Some(message) = val.get("message") else { continue };
+                let Some(content) = message.get("content") else { continue };
+                if let Some(text) = content.as_str() {
+                    // Skip commands and system injections
+                    if text.is_empty() || text.contains("<command-name>") || text.contains("<local-command") { continue; }
+                    history.push(HistoryItem {
+                        item_type: HistoryType::User,
+                        content: truncate_utf8(text, 300),
+                    });
+                } else if let Some(arr) = content.as_array() {
+                    for item in arr {
+                        let it = item.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                        if it == "tool_result" {
+                            let rc = item.get("content");
+                            let text = if let Some(s) = rc.and_then(|v| v.as_str()) {
+                                s.to_string()
+                            } else if let Some(arr2) = rc.and_then(|v| v.as_array()) {
+                                // content can be [{"type":"text","text":"..."},...]
+                                arr2.iter()
+                                    .filter_map(|b| b.get("text").and_then(|v| v.as_str()))
+                                    .collect::<Vec<_>>()
+                                    .join("\n")
+                            } else {
+                                String::new()
+                            };
+                            if !text.is_empty() {
+                                history.push(HistoryItem {
+                                    item_type: HistoryType::ToolResult,
+                                    content: truncate_utf8(&text, 500),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            "assistant" => {
+                let Some(message) = val.get("message") else { continue };
+                let Some(content) = message.get("content") else { continue };
+                let Some(arr) = content.as_array() else { continue };
+                for item in arr {
+                    let it = item.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                    match it {
+                        "text" => {
+                            let text = item.get("text").and_then(|v| v.as_str()).unwrap_or("");
+                            if !text.is_empty() {
+                                history.push(HistoryItem {
+                                    item_type: HistoryType::Assistant,
+                                    content: truncate_utf8(text, 2000),
+                                });
+                            }
+                        }
+                        "tool_use" => {
+                            let name = item.get("name").and_then(|v| v.as_str()).unwrap_or("Tool");
+                            history.push(HistoryItem {
+                                item_type: HistoryType::ToolUse,
+                                content: format!("[{}]", name),
+                            });
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if history.is_empty() { return None; }
+
+    Some(SessionData {
+        session_id: session_id.to_string(),
+        history,
+        current_path: cwd.to_string(),
+        created_at: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+        provider: "claude".to_string(),
+    })
+}
+
+/// Parse a Codex CLI JSONL file into cokacdir SessionData.
+fn parse_codex_jsonl(jsonl_path: &Path, session_id: &str, cwd: &str) -> Option<SessionData> {
+    use std::io::{BufRead, BufReader};
+    let file = fs::File::open(jsonl_path).ok()?;
+    let reader = BufReader::new(file);
+    let mut history: Vec<HistoryItem> = Vec::new();
+
+    for line in reader.lines().flatten() {
+        let Ok(val) = serde_json::from_str::<serde_json::Value>(&line) else { continue };
+        let Some(line_type) = val.get("type").and_then(|v| v.as_str()) else { continue };
+        let Some(payload) = val.get("payload") else { continue };
+
+        match line_type {
+            "event_msg" => {
+                let msg_type = payload.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                match msg_type {
+                    "user_message" => {
+                        let text = payload.get("message").and_then(|v| v.as_str()).unwrap_or("");
+                        if !text.is_empty() {
+                            history.push(HistoryItem {
+                                item_type: HistoryType::User,
+                                content: truncate_utf8(text, 300),
+                            });
+                        }
+                    }
+                    "agent_message" => {
+                        let text = payload.get("message").and_then(|v| v.as_str()).unwrap_or("");
+                        if !text.is_empty() {
+                            history.push(HistoryItem {
+                                item_type: HistoryType::Assistant,
+                                content: truncate_utf8(text, 2000),
+                            });
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            "response_item" => {
+                let item_type = payload.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                match item_type {
+                    // response_item → message is intentionally ignored:
+                    // agent text is already captured via event_msg → agent_message (always emitted in pairs)
+                    "function_call" => {
+                        let name = payload.get("name").and_then(|v| v.as_str()).unwrap_or("Tool");
+                        history.push(HistoryItem {
+                            item_type: HistoryType::ToolUse,
+                            content: format!("[{}]", name),
+                        });
+                    }
+                    "function_call_output" => {
+                        // output can be a plain string or structured {content_items: [...]}
+                        let output = if let Some(s) = payload.get("output").and_then(|v| v.as_str()) {
+                            s.to_string()
+                        } else if let Some(obj) = payload.get("output") {
+                            // Structured: try content_items[].text, then content field
+                            if let Some(items) = obj.get("content_items").and_then(|v| v.as_array()) {
+                                items.iter()
+                                    .filter_map(|c| c.get("text").and_then(|v| v.as_str()))
+                                    .collect::<Vec<_>>()
+                                    .join("\n")
+                            } else if let Some(s) = obj.get("content").and_then(|v| v.as_str()) {
+                                s.to_string()
+                            } else {
+                                String::new()
+                            }
+                        } else {
+                            String::new()
+                        };
+                        if !output.is_empty() {
+                            history.push(HistoryItem {
+                                item_type: HistoryType::ToolResult,
+                                content: truncate_utf8(&output, 500),
+                            });
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if history.is_empty() { return None; }
+
+    Some(SessionData {
+        session_id: session_id.to_string(),
+        history,
+        current_path: cwd.to_string(),
+        created_at: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+        provider: "codex".to_string(),
+    })
+}
+
+/// Truncate a string at a valid UTF-8 boundary.
+fn truncate_utf8(s: &str, max: usize) -> String {
+    if s.len() <= max { return s.to_string(); }
+    let mut end = max;
+    while end > 0 && !s.is_char_boundary(end) { end -= 1; }
+    format!("{}…", &s[..end])
+}
+
+/// Extract the first non-empty `cwd` value from a JSONL file.
+fn extract_cwd_from_jsonl(path: &Path) -> Option<String> {
+    use std::io::{BufRead, BufReader};
+    let file = fs::File::open(path).ok()?;
+    let reader = BufReader::new(file);
+    for line in reader.lines().flatten() {
+        if !line.contains("\"cwd\"") { continue; }
+        if let Some(cwd) = extract_json_string_field(&line, "cwd") {
+            if !cwd.is_empty() {
+                return Some(cwd);
+            }
+        }
+    }
+    None
+}
+
+/// Simple JSON string field extraction: find `"field":"value"` and return value.
+/// Handles escaped quotes (`\"`) inside the value.
+fn extract_json_string_field(json: &str, field: &str) -> Option<String> {
+    let needle = format!("\"{}\":\"", field);
+    let start = json.find(&needle)? + needle.len();
+    let rest = &json[start..];
+    // Find closing quote, skipping escaped quotes
+    let mut end = 0;
+    let bytes = rest.as_bytes();
+    while end < bytes.len() {
+        if bytes[end] == b'"' {
+            // Count preceding backslashes to check if this quote is escaped
+            let mut backslashes = 0;
+            while end > backslashes && bytes[end - 1 - backslashes] == b'\\' {
+                backslashes += 1;
+            }
+            // Unescaped quote: odd number of backslashes means the quote itself is escaped
+            if backslashes % 2 == 0 {
+                break;
+            }
+        }
+        end += 1;
+    }
+    if end >= bytes.len() { return None; }
+    Some(rest[..end].to_string())
+}
+
 /// Handle /WORKSPACE_ID command - resume a workspace session by its ID
 async fn handle_workspace_resume(
     bot: &Bot,
@@ -1373,7 +2003,18 @@ async fn handle_workspace_resume(
         .map(|p| p.display().to_string())
         .unwrap_or_else(|_| workspace_path.display().to_string());
 
-    let existing = load_existing_session(&canonical_path);
+    let ws_provider = {
+        let data = state.lock().await;
+        let ws_model = get_model(&data.settings, chat_id);
+        if ws_model.is_some() {
+            if codex::is_codex_model(ws_model.as_deref()) { "codex" } else { "claude" }
+        } else if !claude::is_claude_available() && codex::is_codex_available() {
+            "codex"
+        } else {
+            "claude"
+        }
+    };
+    let existing = load_existing_session(&canonical_path, ws_provider);
 
     let mut response_lines = Vec::new();
 
@@ -1394,7 +2035,7 @@ async fn handle_workspace_resume(
 
             let ts = chrono::Local::now().format("%H:%M:%S");
             println!("  [{ts}] ▶ Workspace session restored: {workspace_id} → {canonical_path}");
-            response_lines.push(format!("Session restored at `{}`.", canonical_path));
+            response_lines.push(format!("[{}] Session restored at `{}`.", ws_provider, canonical_path));
 
             let header_len: usize = response_lines.iter().map(|l| l.len() + 1).sum();
             let remaining = TELEGRAM_MSG_LIMIT.saturating_sub(header_len + 2);
@@ -1411,7 +2052,7 @@ async fn handle_workspace_resume(
 
             let ts = chrono::Local::now().format("%H:%M:%S");
             println!("  [{ts}] ▶ Workspace session started: {workspace_id} → {canonical_path}");
-            response_lines.push(format!("Session started at `{}`.", canonical_path));
+            response_lines.push(format!("[{}] Session started at `{}`.", ws_provider, canonical_path));
         }
     }
 
@@ -1719,13 +2360,21 @@ async fn handle_file_upload(
     );
     {
         let mut data = state.lock().await;
+        let upload_model = get_model(&data.settings, chat_id);
+        let provider = if upload_model.is_some() {
+            if codex::is_codex_model(upload_model.as_deref()) { "codex" } else { "claude" }
+        } else if !claude::is_claude_available() && codex::is_codex_available() {
+            "codex"
+        } else {
+            "claude"
+        };
         if let Some(session) = data.sessions.get_mut(&chat_id) {
             session.history.push(HistoryItem {
                 item_type: HistoryType::User,
                 content: upload_record.clone(),
             });
             session.pending_uploads.push(upload_record);
-            save_session_to_file(session, &save_dir);
+            save_session_to_file(session, &save_dir, provider);
         }
     }
 
@@ -2375,19 +3024,24 @@ async fn handle_public_command(
     Ok(())
 }
 
-/// Resolve a model alias to pass through to Claude CLI.
-/// Only exact matches from the allowed list are accepted.
-fn resolve_model_name(name: &str) -> Option<String> {
-    match name {
-        "sonnet" | "opus" | "haiku" |
-        "sonnet[1m]" | "opus[1m]" | "haiku[1m]" => Some(name.to_string()),
-        _ => None,
+/// Resolve a model name with provider prefix.
+/// Returns Err(provider_name) if the provider binary is unavailable, or Err("") if the format is invalid.
+fn resolve_model_name(name: &str) -> Result<String, &'static str> {
+    if claude::is_claude_model(Some(name)) {
+        if claude::is_claude_available() {
+            Ok(name.to_string())
+        } else {
+            Err("claude")
+        }
+    } else if codex::is_codex_model(Some(name)) {
+        if codex::is_codex_available() {
+            Ok(name.to_string())
+        } else {
+            Err("codex")
+        }
+    } else {
+        Err("")  // invalid format
     }
-}
-
-/// Format a model name for display.
-fn display_model_name(model: &str) -> String {
-    model.to_string()
 }
 
 /// Handle /model command
@@ -2399,17 +3053,47 @@ async fn handle_model_command(
     token: &str,
 ) -> ResponseResult<()> {
     let arg = text.strip_prefix("/model").unwrap_or("").trim();
+    msg_debug(&format!("[handle_model_command] chat_id={}, arg={:?}", chat_id.0, arg));
 
     if arg.is_empty() {
-        // Show current model
+        // Show current model + available providers
         let current = {
             let data = state.lock().await;
             get_model(&data.settings, chat_id)
         };
-        let msg = match current {
-            Some(m) => format!("Current model: <b>{}</b>", display_model_name(&m)),
-            None => "Current model: <b>default</b>".to_string(),
+        let has_claude = claude::is_claude_available();
+        let has_codex = codex::is_codex_available();
+
+        let mut msg = match &current {
+            Some(m) => format!("Current model: <b>{}</b>\n", m),
+            None => {
+                let default_provider = if has_claude { "claude" } else { "codex" };
+                format!("Current model: <b>default</b> ({})\n", default_provider)
+            }
         };
+        if has_claude {
+            msg.push_str("\n<b>Claude:</b>\n");
+            msg.push_str("<code>/model claude</code> — default\n");
+            msg.push_str("<code>/model claude:sonnet</code> — Sonnet 4.6\n");
+            msg.push_str("<code>/model claude:opus</code> — Opus 4.6\n");
+            msg.push_str("<code>/model claude:haiku</code> — Haiku 4.5\n");
+            msg.push_str("<code>/model claude:sonnet[1m]</code> — Sonnet 1M ctx\n");
+        }
+        if has_codex {
+            msg.push_str("\n<b>Codex:</b>\n");
+            msg.push_str("<code>/model codex</code> — default\n");
+            msg.push_str("<code>/model codex:gpt-5.3-codex</code>\n");
+            msg.push_str("<code>/model codex:gpt-5.2-codex</code>\n");
+            msg.push_str("<code>/model codex:gpt-5.2</code>\n");
+            msg.push_str("<code>/model codex:gpt-5.1-codex-max</code>\n");
+            msg.push_str("<code>/model codex:gpt-5.1-codex</code>\n");
+            msg.push_str("<code>/model codex:gpt-5.1</code>\n");
+            msg.push_str("<code>/model codex:gpt-5-codex</code>\n");
+            msg.push_str("<code>/model codex:gpt-5</code>\n");
+            msg.push_str("<code>/model codex:gpt-5.1-codex-mini</code>\n");
+            msg.push_str("<code>/model codex:gpt-5-codex-mini</code>\n");
+        }
+
         shared_rate_limit_wait(state, chat_id).await;
         tg!("send_message", bot.send_message(chat_id, msg)
             .parse_mode(ParseMode::Html)
@@ -2417,45 +3101,49 @@ async fn handle_model_command(
         return Ok(());
     }
 
-    // Reset to default
-    if arg.eq_ignore_ascii_case("default") || arg.eq_ignore_ascii_case("reset") {
-        {
-            let mut data = state.lock().await;
-            data.settings.models.remove(&chat_id.0.to_string());
-            save_bot_settings(token, &data.settings);
-        }
-        shared_rate_limit_wait(state, chat_id).await;
-        tg!("send_message", bot.send_message(chat_id, "Model reset to <b>default</b>.")
-            .parse_mode(ParseMode::Html)
-            .await)?;
-        return Ok(());
-    }
+    // NOTE: `/model default` and `/model reset` were intentionally removed.
+    // The new provider-prefixed format (claude:xxx / codex:xxx) replaces the old bare model names.
+    // Users should use `/model claude` or `/model codex` to switch to default models.
 
     // Set model
     match resolve_model_name(arg) {
-        Some(model_id) => {
-            let display = display_model_name(&model_id);
+        Ok(model_id) => {
             {
                 let mut data = state.lock().await;
-                data.settings.models.insert(chat_id.0.to_string(), model_id);
+                // If provider changed, clear session_id to avoid cross-provider resume
+                let old_model = get_model(&data.settings, chat_id);
+                let was_codex = codex::is_codex_model(old_model.as_deref());
+                let now_codex = codex::is_codex_model(Some(&model_id));
+                msg_debug(&format!("[handle_model_command] old_model={:?}, was_codex={}, now_codex={}, provider_changed={}",
+                    old_model, was_codex, now_codex, was_codex != now_codex));
+                if was_codex != now_codex {
+                    if let Some(session) = data.sessions.get_mut(&chat_id) {
+                        msg_debug(&format!("[handle_model_command] provider changed → clearing session + history (len={}, old_sid={:?}, old_path={:?})",
+                            session.history.len(), session.session_id, session.current_path));
+                        session.session_id = None;
+                        session.current_path = None;
+                        session.history.clear();
+                    }
+                }
+                data.settings.models.insert(chat_id.0.to_string(), model_id.clone());
                 save_bot_settings(token, &data.settings);
             }
             shared_rate_limit_wait(state, chat_id).await;
-            tg!("send_message", bot.send_message(chat_id, format!("Model set to <b>{display}</b>."))
+            tg!("send_message", bot.send_message(chat_id, format!("Model set to <b>{model_id}</b>."))
                 .parse_mode(ParseMode::Html)
                 .await)?;
         }
-        None => {
+        Err(provider) if !provider.is_empty() => {
+            shared_rate_limit_wait(state, chat_id).await;
+            tg!("send_message", bot.send_message(chat_id, format!("{provider} provider is not installed."))
+                .await)?;
+        }
+        Err(_) => {
             shared_rate_limit_wait(state, chat_id).await;
             tg!("send_message", bot.send_message(chat_id,
-                "Unknown model. Available:\n\
-                 <code>/model sonnet</code>\n\
-                 <code>/model opus</code>\n\
-                 <code>/model haiku</code>\n\
-                 <code>/model sonnet[1m]</code>\n\
-                 <code>/model opus[1m]</code>\n\
-                 <code>/model haiku[1m]</code>\n\
-                 <code>/model default</code> — reset to default")
+                "Invalid format. Use:\n\
+                 <code>/model claude</code> or <code>/model claude:&lt;model&gt;</code>\n\
+                 <code>/model codex</code> or <code>/model codex:&lt;model&gt;</code>")
                 .parse_mode(ParseMode::Html)
                 .await)?;
         }
@@ -2471,8 +3159,11 @@ async fn handle_text_message(
     user_text: &str,
     state: &SharedState,
 ) -> ResponseResult<()> {
-    // Get session info, allowed tools, model, and pending uploads (drop lock before any await)
-    let (session_info, allowed_tools, pending_uploads, model) = {
+    msg_debug(&format!("[handle_text_message] START chat_id={}, user_text={:?}",
+        chat_id.0, truncate_str(user_text, 100)));
+
+    // Get session info, allowed tools, model, pending uploads, and history (drop lock before any await)
+    let (session_info, allowed_tools, pending_uploads, model, history) = {
         let mut data = state.lock().await;
         let info = data.sessions.get(&chat_id).and_then(|session| {
             session.current_path.as_ref().map(|_| {
@@ -2481,6 +3172,9 @@ async fn handle_text_message(
         });
         let tools = get_allowed_tools(&data.settings, chat_id);
         let mdl = get_model(&data.settings, chat_id);
+        let hist = data.sessions.get(&chat_id)
+            .map(|s| s.history.clone())
+            .unwrap_or_default();
         // Drain pending uploads so they are sent to Claude exactly once
         let uploads = data.sessions.get_mut(&chat_id)
             .map(|s| {
@@ -2488,7 +3182,9 @@ async fn handle_text_message(
                 std::mem::take(&mut s.pending_uploads)
             })
             .unwrap_or_default();
-        (info, tools, uploads, mdl)
+        msg_debug(&format!("[handle_text_message] session_id={:?}, current_path={:?}, model={:?}, uploads={}, history_len={}",
+            info.as_ref().map(|(sid, _)| sid), info.as_ref().map(|(_, p)| p), mdl, uploads.len(), hist.len()));
+        (info, tools, uploads, mdl, hist)
     };
 
     let (session_id, current_path) = match session_info {
@@ -2561,20 +3257,73 @@ async fn handle_text_message(
     let current_path_clone = current_path.clone();
     let cancel_token_clone = cancel_token.clone();
 
-    // Run Claude in a blocking thread
+    // Run AI backend in a blocking thread
+    let model_clone = model.clone();
+    let history_clone = history;
+    msg_debug(&format!("[handle_text_message] prompt_len={}, system_prompt_len={}, session_id={:?}, path={}, history_len={}",
+        context_prompt.len(), system_prompt_owned.len(), session_id_clone, current_path_clone, history_clone.len()));
     tokio::task::spawn_blocking(move || {
-        let result = claude::execute_command_streaming(
-            &context_prompt,
-            session_id_clone.as_deref(),
-            &current_path_clone,
-            tx.clone(),
-            Some(&system_prompt_owned),
-            Some(&allowed_tools),
-            Some(cancel_token_clone),
-            model.as_deref(),
-            false,
-        );
+        let use_codex = if model_clone.is_some() {
+            codex::is_codex_model(model_clone.as_deref())
+        } else {
+            !claude::is_claude_available() && codex::is_codex_available()
+        };
+        msg_debug(&format!("[handle_text_message] use_codex={}, model={:?}", use_codex, model_clone));
+        let result = if use_codex {
+            let codex_model = model_clone.as_deref().and_then(codex::strip_codex_prefix);
+            // Codex exec is ephemeral — inject conversation history into prompt
+            let codex_prompt = if history_clone.is_empty() {
+                context_prompt.clone()
+            } else {
+                let mut conv = String::new();
+                conv.push_str("<conversation_history>\n");
+                for item in &history_clone {
+                    let role = match item.item_type {
+                        HistoryType::User => "User",
+                        HistoryType::Assistant => "Assistant",
+                        HistoryType::ToolUse => "ToolUse",
+                        HistoryType::ToolResult => "ToolResult",
+                        _ => continue,  // skip Error, System
+                    };
+                    conv.push_str(&format!("[{}]: {}\n", role, item.content));
+                }
+                conv.push_str("</conversation_history>\n\n");
+                conv.push_str(&context_prompt);
+                conv
+            };
+            msg_debug(&format!("[handle_text_message] → codex::execute, codex_model={:?}, codex_prompt_len={}",
+                codex_model, codex_prompt.len()));
+            codex::execute_command_streaming(
+                &codex_prompt,
+                session_id_clone.as_deref(),
+                &current_path_clone,
+                tx.clone(),
+                Some(&system_prompt_owned),
+                Some(&allowed_tools),
+                Some(cancel_token_clone),
+                codex_model,
+                false,
+            )
+        } else {
+            let claude_model = model_clone.as_deref().and_then(claude::strip_claude_prefix);
+            msg_debug(&format!("[handle_text_message] → claude::execute, claude_model={:?}", claude_model));
+            claude::execute_command_streaming(
+                &context_prompt,
+                session_id_clone.as_deref(),
+                &current_path_clone,
+                tx.clone(),
+                Some(&system_prompt_owned),
+                Some(&allowed_tools),
+                Some(cancel_token_clone),
+                claude_model,
+                false,
+            )
+        };
 
+        match &result {
+            Ok(()) => msg_debug("[handle_text_message] execute completed OK"),
+            Err(e) => msg_debug(&format!("[handle_text_message] execute error: {}", e)),
+        }
         if let Err(e) = result {
             let _ = tx.send(StreamMessage::Error { message: e, stdout: String::new(), stderr: String::new(), exit_code: None });
         }
@@ -2585,6 +3334,13 @@ async fn handle_text_message(
     let bot_owned = bot.clone();
     let state_owned = state.clone();
     let user_text_owned = user_text.to_string();
+    let provider_str: &'static str = if model.is_some() {
+        if codex::is_codex_model(model.as_deref()) { "codex" } else { "claude" }
+    } else if !claude::is_claude_available() && codex::is_codex_available() {
+        "codex"
+    } else {
+        "claude"
+    };
     tokio::spawn(async move {
         const SPINNER: &[&str] = &[
             "🕐 P",           "🕑 Pr",          "🕒 Pro",
@@ -2632,9 +3388,12 @@ async fn handle_text_message(
                         Ok(msg) => {
                             match msg {
                                 StreamMessage::Init { session_id: sid } => {
+                                    msg_debug(&format!("[polling] Init: session_id={}", sid));
                                     new_session_id = Some(sid);
                                 }
                                 StreamMessage::Text { content } => {
+                                    msg_debug(&format!("[polling] Text: {} chars, preview={:?}",
+                                        content.len(), truncate_str(&content, 80)));
                                     full_response.push_str(&content);
                                 }
                                 StreamMessage::ToolUse { name, input } => {
@@ -2685,6 +3444,8 @@ async fn handle_text_message(
                                     }
                                 }
                                 StreamMessage::Done { result, session_id: sid } => {
+                                    msg_debug(&format!("[polling] Done: result_len={}, session_id={:?}",
+                                        result.len(), sid));
                                     if !result.is_empty() && full_response.is_empty() {
                                         full_response = result;
                                     }
@@ -2694,6 +3455,8 @@ async fn handle_text_message(
                                     done = true;
                                 }
                                 StreamMessage::Error { message, stdout, stderr, exit_code } => {
+                                    msg_debug(&format!("[polling] Error: message={}, exit_code={:?}, stdout_len={}, stderr_len={}",
+                                        message, exit_code, stdout.len(), stderr.len()));
                                     let stdout_display = if stdout.is_empty() { "(empty)".to_string() } else { stdout };
                                     let stderr_display = if stderr.is_empty() { "(empty)".to_string() } else { stderr };
                                     let code_display = match exit_code {
@@ -2817,6 +3580,8 @@ async fn handle_text_message(
                     let mut data = state_owned.lock().await;
                     if let Some(session) = data.sessions.get_mut(&chat_id) {
                         if !session.cleared {
+                            msg_debug(&format!("[polling] saving session: new_session_id={:?}, old_session_id={:?}, history_len={}",
+                                new_session_id, session.session_id, session.history.len()));
                             if let Some(sid) = new_session_id.take() {
                                 session.session_id = Some(sid);
                             }
@@ -2828,7 +3593,9 @@ async fn handle_text_message(
                                 item_type: HistoryType::Assistant,
                                 content: final_response,
                             });
-                            save_session_to_file(session, &current_path);
+                            save_session_to_file(session, &current_path, provider_str);
+                            msg_debug(&format!("[polling] session saved: session_id={:?}, history_len={}",
+                                session.session_id, session.history.len()));
                         }
                     }
                 }
@@ -2931,7 +3698,7 @@ async fn handle_text_message(
                         item_type: HistoryType::Assistant,
                         content: stopped_response,
                     });
-                    save_session_to_file(session, &current_path);
+                    save_session_to_file(session, &current_path, provider_str);
                 }
             }
             data.cancel_tokens.remove(&chat_id);
@@ -2959,8 +3726,9 @@ async fn handle_text_message(
     Ok(())
 }
 
-/// Load existing session from ai_sessions directory matching the given path
-fn load_existing_session(current_path: &str) -> Option<(SessionData, std::time::SystemTime)> {
+/// Load existing session from ai_sessions directory matching the given path and provider
+fn load_existing_session(current_path: &str, provider: &str) -> Option<(SessionData, std::time::SystemTime)> {
+    msg_debug(&format!("[load_session] looking for path={}, provider={}", current_path, provider));
     let sessions_dir = ai_screen::ai_sessions_dir()?;
 
     if !sessions_dir.exists() {
@@ -2976,6 +3744,14 @@ fn load_existing_session(current_path: &str) -> Option<(SessionData, std::time::
                 if let Ok(content) = fs::read_to_string(&path) {
                     if let Ok(session_data) = serde_json::from_str::<SessionData>(&content) {
                         if session_data.current_path == current_path {
+                            // Provider filter: match exact provider, or allow empty (legacy files)
+                            if !session_data.provider.is_empty() && session_data.provider != provider {
+                                msg_debug(&format!("[load_session] skipped session_id={} (provider mismatch: {} != {})",
+                                    session_data.session_id, session_data.provider, provider));
+                                continue;
+                            }
+                            msg_debug(&format!("[load_session] found session_id={}, provider={}, path={}",
+                                session_data.session_id, session_data.provider, session_data.current_path));
                             if let Ok(metadata) = path.metadata() {
                                 if let Ok(modified) = metadata.modified() {
                                     match &matching_session {
@@ -2998,7 +3774,7 @@ fn load_existing_session(current_path: &str) -> Option<(SessionData, std::time::
 }
 
 /// Save session to file in the ai_sessions directory
-fn save_session_to_file(session: &ChatSession, current_path: &str) {
+fn save_session_to_file(session: &ChatSession, current_path: &str, provider: &str) {
     let Some(ref session_id) = session.session_id else {
         return;
     };
@@ -3030,7 +3806,9 @@ fn save_session_to_file(session: &ChatSession, current_path: &str) {
         history: saveable_history,
         current_path: current_path.to_string(),
         created_at: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+        provider: provider.to_string(),
     };
+    msg_debug(&format!("[save_session] provider={}, session_id={}, path={}", provider, session_id, current_path));
 
     // Security: whitelist session_id to alphanumeric, hyphens, underscores only
     if !session_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
@@ -3606,6 +4384,11 @@ fn format_bash_command(input: &str) -> String {
 
 /// Format tool input JSON into a human-readable summary
 fn format_tool_input(name: &str, input: &str) -> String {
+    // FileChange input is a pre-formatted summary string, not JSON
+    if name == "FileChange" {
+        return format!("\u{1F4DD} {}", input);
+    }
+
     let Ok(v) = serde_json::from_str::<serde_json::Value>(input) else {
         return format!("{} {}", name, input);
     };
@@ -4014,21 +4797,43 @@ async fn execute_schedule(
     let cancel_token_clone = cancel_token.clone();
     let model_for_summary = model.clone();
 
-    // Run Claude in a blocking thread (always new session — context is in the prompt)
+    // Run AI backend in a blocking thread (always new session — context is in the prompt)
     // Session persistence must be kept so users can resume via /SCHEDULE_ID
     let workspace_path_for_claude = workspace_path.clone();
+    let model_clone_for_exec = model.clone();
     tokio::task::spawn_blocking(move || {
-        let result = claude::execute_command_streaming(
-            &prompt,
-            None,
-            &workspace_path_for_claude,
-            tx.clone(),
-            Some(&system_prompt_owned),
-            Some(&allowed_tools),
-            Some(cancel_token_clone),
-            model.as_deref(),
-            false,
-        );
+        let use_codex = if model_clone_for_exec.is_some() {
+            codex::is_codex_model(model_clone_for_exec.as_deref())
+        } else {
+            !claude::is_claude_available() && codex::is_codex_available()
+        };
+        let result = if use_codex {
+            let codex_model = model_clone_for_exec.as_deref().and_then(codex::strip_codex_prefix);
+            codex::execute_command_streaming(
+                &prompt,
+                None,
+                &workspace_path_for_claude,
+                tx.clone(),
+                Some(&system_prompt_owned),
+                Some(&allowed_tools),
+                Some(cancel_token_clone),
+                codex_model,
+                false,
+            )
+        } else {
+            let claude_model = model_clone_for_exec.as_deref().and_then(claude::strip_claude_prefix);
+            claude::execute_command_streaming(
+                &prompt,
+                None,
+                &workspace_path_for_claude,
+                tx.clone(),
+                Some(&system_prompt_owned),
+                Some(&allowed_tools),
+                Some(cancel_token_clone),
+                claude_model,
+                false,
+            )
+        };
         if let Err(e) = result {
             let _ = tx.send(StreamMessage::Error { message: e, stdout: String::new(), stderr: String::new(), exit_code: None });
         }
@@ -4271,17 +5076,27 @@ async fn execute_schedule(
         // Skip if execution was cancelled or encountered an error
         sched_debug(&format!("[execute_schedule] id={}, checking context summary: cancelled={}, had_error={}, type={}, once={:?}, has_context={}",
             schedule_id, cancelled, had_error, entry_clone.schedule_type, entry_clone.once, entry_clone.context_summary.is_some()));
-        let new_context_summary = if !cancelled && !had_error && entry_clone.schedule_type == "cron" && !entry_clone.once.unwrap_or(false) && entry_clone.context_summary.is_some() {
+        let is_codex_sched = if model_for_summary.is_some() {
+            codex::is_codex_model(model_for_summary.as_deref())
+        } else {
+            !claude::is_claude_available() && codex::is_codex_available()
+        };
+        let new_context_summary = if is_codex_sched {
+            // Codex doesn't support session resume — skip summary extraction
+            sched_debug(&format!("[execute_schedule] id={}, Codex backend — skipping context summary", schedule_id));
+            None
+        } else if !cancelled && !had_error && entry_clone.schedule_type == "cron" && !entry_clone.once.unwrap_or(false) && entry_clone.context_summary.is_some() {
             sched_debug(&format!("[execute_schedule] id={}, extracting result summary", schedule_id));
             if let Some(ref sid) = exec_session_id {
                 let sid = sid.clone();
                 let path = workspace_path_owned.clone();
                 let model = model_for_summary.clone();
                 let summary_result = tokio::task::spawn_blocking(move || {
+                    let claude_model = model.as_deref().and_then(claude::strip_claude_prefix);
                     claude::extract_result_summary(
                         &sid,
                         &path,
-                        model.as_deref(),
+                        claude_model,
                     )
                 }).await;
                 match summary_result {
@@ -4322,7 +5137,8 @@ async fn execute_schedule(
                     content: full_response.clone(),
                 });
             }
-            save_session_to_file(&sched_session, &workspace_path_owned);
+            let sched_provider = if is_codex_sched { "codex" } else { "claude" };
+            save_session_to_file(&sched_session, &workspace_path_owned, sched_provider);
         }
 
         // Update schedule file (last_run / delete if once)

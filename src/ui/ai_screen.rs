@@ -377,6 +377,8 @@ pub struct SessionData {
     pub history: Vec<HistoryItem>,
     pub current_path: String,
     pub created_at: String,
+    #[serde(default)]
+    pub provider: String,
 }
 
 /// Get the AI sessions directory path (~/.cokacdir/ai_sessions)
@@ -457,6 +459,7 @@ impl AIScreenState {
             history: saveable_history,
             current_path: self.current_path.clone(),
             created_at: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+            provider: "claude".to_string(),
         };
 
         let file_path = sessions_dir.join(format!("{}.json", session_id));
@@ -492,8 +495,9 @@ impl AIScreenState {
                     // Read and parse each session file
                     if let Ok(content) = fs::read_to_string(&path) {
                         if let Ok(session_data) = serde_json::from_str::<SessionData>(&content) {
-                            // Only consider sessions with matching path
-                            if session_data.current_path == current_path {
+                            // Only consider sessions with matching path (TUI is Claude-only; skip codex sessions)
+                            if session_data.current_path == current_path
+                                && (session_data.provider.is_empty() || session_data.provider == "claude") {
                                 if let Ok(metadata) = path.metadata() {
                                     if let Ok(modified) = metadata.modified() {
                                         match &matching_session {
