@@ -96,7 +96,7 @@ fn codex_debug_log(msg: &str) {
 ///
 /// Parameters mirror `claude::execute_command_streaming` for consistency,
 /// but some are ignored (session_id, allowed_tools, no_session_persistence)
-/// because Codex exec is always ephemeral and has no tool restriction support.
+/// because Codex exec has no tool restriction support.
 pub fn execute_command_streaming(
     prompt: &str,
     _session_id: Option<&str>,        // ignored — Codex exec is always a new session
@@ -106,7 +106,7 @@ pub fn execute_command_streaming(
     _allowed_tools: Option<&[String]>, // ignored — Codex has no tool restriction
     cancel_token: Option<std::sync::Arc<CancelToken>>,
     model: Option<&str>,               // "codex:" prefix already stripped
-    _no_session_persistence: bool,     // ignored — always ephemeral
+    _no_session_persistence: bool,     // ignored — Codex exec handles persistence internally
 ) -> Result<(), String> {
     codex_debug_log("========================================");
     codex_debug_log("=== codex execute_command_streaming START ===");
@@ -122,12 +122,11 @@ pub fn execute_command_streaming(
     };
 
     // Build CLI arguments:
-    //   codex exec --json --dangerously-bypass-approvals-and-sandbox --ephemeral -C <dir> [-m <model>] -
+    //   codex exec --json --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -C <dir> [-m <model>] -
     let mut args = vec![
         "exec".to_string(),
         "--json".to_string(),
         "--dangerously-bypass-approvals-and-sandbox".to_string(),
-        "--ephemeral".to_string(),
         "--skip-git-repo-check".to_string(),
         "-C".to_string(),
         working_dir.to_string(),

@@ -1077,8 +1077,11 @@ async fn handle_message(
     }
 
     let Some(raw_text) = msg.text() else {
+        msg_debug(&format!("[handle_message] chat_id={}, non-text message (no raw_text), skipping", chat_id.0));
         return Ok(());
     };
+
+    msg_debug(&format!("[handle_message] chat_id={}, user={}, raw_text={:?}", chat_id.0, user_name, truncate_str(raw_text, 100)));
 
     // Strip @botname suffix from commands (e.g. "/pwd@mybot" → "/pwd")
     let text = if raw_text.starts_with('/') {
@@ -1186,28 +1189,36 @@ async fn handle_message(
     }
 
     if text.starts_with("/stop") {
+        msg_debug(&format!("[handle_message] routing → /stop"));
         println!("  [{timestamp}] ◀ [{user_name}] /stop");
         handle_stop_command(&bot, chat_id, &state).await?;
     } else if text.starts_with("/help") {
+        msg_debug(&format!("[handle_message] routing → /help"));
         println!("  [{timestamp}] ◀ [{user_name}] /help");
         handle_help_command(&bot, chat_id, &state).await?;
     } else if text.starts_with("/start") {
+        msg_debug(&format!("[handle_message] routing → /start"));
         println!("  [{timestamp}] ◀ [{user_name}] /start");
         handle_start_command(&bot, chat_id, &text, &state, token).await?;
     } else if text.starts_with("/clear") {
+        msg_debug(&format!("[handle_message] routing → /clear"));
         println!("  [{timestamp}] ◀ [{user_name}] /clear");
         handle_clear_command(&bot, chat_id, &state).await?;
         println!("  [{timestamp}] ▶ [{user_name}] Session cleared");
     } else if text.starts_with("/pwd") {
+        msg_debug(&format!("[handle_message] routing → /pwd"));
         println!("  [{timestamp}] ◀ [{user_name}] /pwd");
         handle_pwd_command(&bot, chat_id, &state).await?;
     } else if text.starts_with("/down") {
+        msg_debug(&format!("[handle_message] routing → /down"));
         println!("  [{timestamp}] ◀ [{user_name}] /down {}", text.strip_prefix("/down").unwrap_or("").trim());
         handle_down_command(&bot, chat_id, &text, &state).await?;
     } else if text.starts_with("/public") {
+        msg_debug("[handle_message] routing → /public");
         println!("  [{timestamp}] ◀ [{user_name}] /public {}", text.strip_prefix("/public").unwrap_or("").trim());
         handle_public_command(&bot, chat_id, &text, &state, token, is_group_chat, is_owner).await?;
     } else if text.starts_with("/availabletools") {
+        msg_debug("[handle_message] routing → /availabletools");
         println!("  [{timestamp}] ◀ [{user_name}] /availabletools");
         let is_codex = codex::is_codex_model(get_model(&state.lock().await.settings, chat_id).as_deref());
         if is_codex {
@@ -1216,6 +1227,7 @@ async fn handle_message(
             handle_availabletools_command(&bot, chat_id, &state).await?;
         }
     } else if text.starts_with("/allowedtools") {
+        msg_debug("[handle_message] routing → /allowedtools");
         println!("  [{timestamp}] ◀ [{user_name}] /allowedtools");
         let is_codex = codex::is_codex_model(get_model(&state.lock().await.settings, chat_id).as_deref());
         if is_codex {
@@ -1224,18 +1236,23 @@ async fn handle_message(
             handle_allowedtools_command(&bot, chat_id, &state).await?;
         }
     } else if text.starts_with("/setpollingtime") {
+        msg_debug("[handle_message] routing → /setpollingtime");
         println!("  [{timestamp}] ◀ [{user_name}] /setpollingtime {}", text.strip_prefix("/setpollingtime").unwrap_or("").trim());
         handle_setpollingtime_command(&bot, chat_id, &text, &state).await?;
     } else if text.starts_with("/model") {
+        msg_debug("[handle_message] routing → /model");
         println!("  [{timestamp}] ◀ [{user_name}] /model {}", text.strip_prefix("/model").unwrap_or("").trim());
         handle_model_command(&bot, chat_id, &text, &state, token).await?;
     } else if text.starts_with("/debug") {
+        msg_debug("[handle_message] routing → /debug");
         println!("  [{timestamp}] ◀ [{user_name}] /debug");
         handle_debug_command(&bot, chat_id, &state, token).await?;
     } else if text.starts_with("/silent") {
+        msg_debug("[handle_message] routing → /silent");
         println!("  [{timestamp}] ◀ [{user_name}] /silent");
         handle_silent_command(&bot, chat_id, &state, token).await?;
     } else if text.starts_with("/allowed") {
+        msg_debug("[handle_message] routing → /allowed");
         println!("  [{timestamp}] ◀ [{user_name}] /allowed {}", text.strip_prefix("/allowed").unwrap_or("").trim());
         let is_codex = codex::is_codex_model(get_model(&state.lock().await.settings, chat_id).as_deref());
         if is_codex {
@@ -1245,9 +1262,11 @@ async fn handle_message(
         }
     } else if text.starts_with('/') && is_workspace_id(text[1..].split_whitespace().next().unwrap_or("")) {
         let workspace_id = text[1..].split_whitespace().next().unwrap();
+        msg_debug(&format!("[handle_message] routing → workspace_resume: {}", workspace_id));
         println!("  [{timestamp}] ◀ [{user_name}] /{workspace_id}");
         handle_workspace_resume(&bot, chat_id, workspace_id, &state, token).await?;
     } else if text.starts_with('!') {
+        msg_debug(&format!("[handle_message] routing → shell command"));
         println!("  [{timestamp}] ◀ [{user_name}] Shell: {preview}");
         handle_shell_command(&bot, chat_id, &text, &state).await?;
     } else if text.starts_with(';') {
@@ -1256,9 +1275,11 @@ async fn handle_message(
             return Ok(());
         }
         let preview = &stripped;
+        msg_debug(&format!("[handle_message] routing → text_message (;prefix)"));
         println!("  [{timestamp}] ◀ [{user_name}] {preview}");
         handle_text_message(&bot, chat_id, &stripped, &state).await?;
     } else {
+        msg_debug(&format!("[handle_message] routing → text_message (plain)"));
         println!("  [{timestamp}] ◀ [{user_name}] {preview}");
         handle_text_message(&bot, chat_id, &text, &state).await?;
     }
@@ -1638,7 +1659,8 @@ struct ResolvedSession {
 
 /// Resolve a session by name or ID, scoped to the current provider.
 fn resolve_session(query: &str, provider: SessionProvider) -> Option<ResolvedSession> {
-    match provider {
+    msg_debug(&format!("[resolve_session] query={:?}, provider={:?}, is_uuid={}", query, provider, is_uuid(query)));
+    let result = match provider {
         SessionProvider::Claude => {
             if is_uuid(query) {
                 resolve_claude_by_id(query).or_else(|| resolve_claude_by_name(query))
@@ -1647,21 +1669,30 @@ fn resolve_session(query: &str, provider: SessionProvider) -> Option<ResolvedSes
             }
         }
         SessionProvider::Codex => {
-            // Codex has no session naming — ID only
             resolve_codex_by_id(query)
         }
-    }
+    };
+    msg_debug(&format!("[resolve_session] result={}", match &result {
+        Some(r) => format!("found(cwd={:?}, session_id={})", r.cwd, r.session_id),
+        None => "None".to_string(),
+    }));
+    result
 }
 
 /// Claude: find `~/.claude/projects/*/{session_id}.jsonl`.
 fn resolve_claude_by_id(session_id: &str) -> Option<ResolvedSession> {
+    msg_debug(&format!("[resolve_claude_by_id] session_id={}", session_id));
     let projects_dir = dirs::home_dir()?.join(".claude").join("projects");
-    if !projects_dir.is_dir() { return None; }
+    if !projects_dir.is_dir() {
+        msg_debug(&format!("[resolve_claude_by_id] projects_dir not found: {}", projects_dir.display()));
+        return None;
+    }
     let filename = format!("{}.jsonl", session_id);
     for entry in fs::read_dir(&projects_dir).ok()?.flatten() {
         if !entry.file_type().map_or(false, |t| t.is_dir()) { continue; }
         let jsonl_path = entry.path().join(&filename);
         if jsonl_path.exists() {
+            msg_debug(&format!("[resolve_claude_by_id] found: {}", jsonl_path.display()));
             let cwd = extract_cwd_from_jsonl(&jsonl_path)?;
             return Some(ResolvedSession {
                 cwd, jsonl_path,
@@ -1670,13 +1701,18 @@ fn resolve_claude_by_id(session_id: &str) -> Option<ResolvedSession> {
             });
         }
     }
+    msg_debug("[resolve_claude_by_id] not found");
     None
 }
 
 /// Claude: scan `~/.claude/projects/*/*.jsonl` for matching `custom-title`.
 fn resolve_claude_by_name(name: &str) -> Option<ResolvedSession> {
+    msg_debug(&format!("[resolve_claude_by_name] name={:?}", name));
     let projects_dir = dirs::home_dir()?.join(".claude").join("projects");
-    if !projects_dir.is_dir() { return None; }
+    if !projects_dir.is_dir() {
+        msg_debug(&format!("[resolve_claude_by_name] projects_dir not found: {}", projects_dir.display()));
+        return None;
+    }
     let name_lower = name.to_lowercase();
     for proj_entry in fs::read_dir(&projects_dir).ok()?.flatten() {
         if !proj_entry.file_type().map_or(false, |t| t.is_dir()) { continue; }
@@ -1685,10 +1721,12 @@ fn resolve_claude_by_name(name: &str) -> Option<ResolvedSession> {
             let path = file_entry.path();
             if path.extension().and_then(|e| e.to_str()) != Some("jsonl") { continue; }
             if let Some(info) = find_session_by_title(&path, &name_lower) {
+                msg_debug(&format!("[resolve_claude_by_name] found: session_id={}, cwd={:?}", info.session_id, info.cwd));
                 return Some(info);
             }
         }
     }
+    msg_debug("[resolve_claude_by_name] not found");
     None
 }
 
@@ -2165,6 +2203,7 @@ async fn handle_workspace_resume(
     state: &SharedState,
     token: &str,
 ) -> ResponseResult<()> {
+    msg_debug(&format!("[workspace_resume] chat_id={}, workspace_id={}", chat_id.0, workspace_id));
     let Some(home) = dirs::home_dir() else {
         shared_rate_limit_wait(state, chat_id).await;
         tg!("send_message", bot.send_message(chat_id, "Error: cannot determine home directory.")
@@ -2196,6 +2235,7 @@ async fn handle_workspace_resume(
             "claude"
         }
     };
+    msg_debug(&format!("[workspace_resume] canonical_path={:?}, provider={}", canonical_path, ws_provider));
     let existing = load_existing_session(&canonical_path, ws_provider);
 
     let mut response_lines = Vec::new();
@@ -2257,9 +2297,13 @@ async fn handle_clear_command(
     chat_id: ChatId,
     state: &SharedState,
 ) -> ResponseResult<()> {
+    msg_debug(&format!("[handle_clear] chat_id={}", chat_id.0));
     let (current_path, provider, orphan_stop_msg) = {
         let mut data = state.lock().await;
         let path = data.sessions.get(&chat_id).and_then(|s| s.current_path.clone());
+        let old_sid = data.sessions.get(&chat_id).and_then(|s| s.session_id.clone());
+        let old_hist_len = data.sessions.get(&chat_id).map(|s| s.history.len()).unwrap_or(0);
+        msg_debug(&format!("[handle_clear] clearing: path={:?}, session_id={:?}, history_len={}", path, old_sid, old_hist_len));
         if let Some(session) = data.sessions.get_mut(&chat_id) {
             session.session_id = None;
             session.history.clear();
@@ -2319,7 +2363,10 @@ async fn handle_pwd_command(
 ) -> ResponseResult<()> {
     let current_path = {
         let data = state.lock().await;
-        data.sessions.get(&chat_id).and_then(|s| s.current_path.clone())
+        let path = data.sessions.get(&chat_id).and_then(|s| s.current_path.clone());
+        let sid = data.sessions.get(&chat_id).and_then(|s| s.session_id.clone());
+        msg_debug(&format!("[handle_pwd] chat_id={}, path={:?}, session_id={:?}", chat_id.0, path, sid));
+        path
     };
 
     shared_rate_limit_wait(state, chat_id).await;
@@ -2349,6 +2396,7 @@ async fn handle_stop_command(
         let data = state.lock().await;
         data.cancel_tokens.get(&chat_id).cloned()
     };
+    msg_debug(&format!("[handle_stop] chat_id={}, has_token={}", chat_id.0, token.is_some()));
 
     match token {
         Some(token) => {
@@ -2413,6 +2461,7 @@ async fn handle_down_command(
     state: &SharedState,
 ) -> ResponseResult<()> {
     let file_path = text.strip_prefix("/down").unwrap_or("").trim();
+    msg_debug(&format!("[handle_down] chat_id={}, file_path={:?}", chat_id.0, file_path));
 
     if file_path.is_empty() {
         shared_rate_limit_wait(state, chat_id).await;
@@ -2466,6 +2515,7 @@ async fn handle_file_upload(
     msg: &Message,
     state: &SharedState,
 ) -> ResponseResult<()> {
+    msg_debug(&format!("[handle_upload] chat_id={}, has_doc={}, has_photo={}", chat_id.0, msg.document().is_some(), msg.photo().is_some()));
     // Get current session path
     let current_path = {
         let data = state.lock().await;
@@ -2577,6 +2627,7 @@ async fn handle_shell_command(
     state: &SharedState,
 ) -> ResponseResult<()> {
     let cmd_str = text.strip_prefix('!').unwrap_or("").trim();
+    msg_debug(&format!("[handle_shell] chat_id={}, cmd={:?}", chat_id.0, truncate_str(cmd_str, 100)));
 
     if cmd_str.is_empty() {
         shared_rate_limit_wait(state, chat_id).await;
@@ -3028,6 +3079,7 @@ async fn handle_debug_command(
 ) -> ResponseResult<()> {
     let prev = TG_DEBUG.load(Ordering::Relaxed);
     let next = !prev;
+    msg_debug(&format!("[handle_debug] chat_id={}, {} → {}", chat_id.0, prev, next));
     TG_DEBUG.store(next, Ordering::Relaxed);
     crate::services::claude::DEBUG_ENABLED.store(next, Ordering::Relaxed);
     {
@@ -3076,6 +3128,7 @@ async fn handle_allowed_command(
     token: &str,
 ) -> ResponseResult<()> {
     let arg = text.strip_prefix("/allowed").unwrap_or("").trim();
+    msg_debug(&format!("[handle_allowed] chat_id={}, arg={:?}", chat_id.0, arg));
 
     if arg.is_empty() {
         shared_rate_limit_wait(state, chat_id).await;
@@ -3470,7 +3523,7 @@ async fn handle_text_message(
         msg_debug(&format!("[handle_text_message] use_codex={}, model={:?}", use_codex, model_clone));
         let result = if use_codex {
             let codex_model = model_clone.as_deref().and_then(codex::strip_codex_prefix);
-            // Codex exec is ephemeral — inject conversation history into prompt
+            // Codex exec is stateless per invocation — inject conversation history into prompt
             let codex_prompt = if history_clone.is_empty() {
                 context_prompt.clone()
             } else {
@@ -3984,18 +4037,22 @@ fn load_existing_session(current_path: &str, provider: &str) -> Option<(SessionD
 /// Save session to file in the ai_sessions directory
 fn save_session_to_file(session: &ChatSession, current_path: &str, provider: &str) {
     let Some(ref session_id) = session.session_id else {
+        msg_debug("[save_session] skipped: no session_id");
         return;
     };
 
     if session.history.is_empty() {
+        msg_debug("[save_session] skipped: empty history");
         return;
     }
 
     let Some(sessions_dir) = ai_screen::ai_sessions_dir() else {
+        msg_debug("[save_session] skipped: ai_sessions_dir() returned None");
         return;
     };
 
     if fs::create_dir_all(&sessions_dir).is_err() {
+        msg_debug("[save_session] skipped: create_dir_all failed");
         return;
     }
 
