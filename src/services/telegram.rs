@@ -2434,13 +2434,13 @@ async fn handle_pwd_command(
     shared_rate_limit_wait(state, chat_id).await;
     match current_path {
         Some(path) => {
-            let mut msg = format!("`{}`", path);
+            let mut msg = format!("<code>{}</code>", path);
             if let Some(folder_name) = std::path::Path::new(&path).file_name().and_then(|n| n.to_str()) {
                 if is_workspace_id(folder_name) {
                     msg.push_str(&format!("\nUse /{} to switch back to this session.", folder_name));
                 }
             }
-            tg!("send_message", bot.send_message(chat_id, msg).await)?
+            tg!("send_message", bot.send_message(chat_id, msg).parse_mode(ParseMode::Html).await)?
         }
         None => tg!("send_message", bot.send_message(chat_id, "No active session. Use /start <path> first.").await)?,
     };
@@ -2472,10 +2472,10 @@ async fn handle_session_command(
             };
             let provider = if is_codex { "Codex" } else { "Claude" };
             let msg = format!(
-                "Current {} session ID:\n`{}`\n\nTo resume this session from your terminal:\n`cd \"{}\"; {}`",
+                "Current {} session ID:\n<code>{}</code>\n\nTo resume this session from your terminal:\n<code>cd \"{}\"; {}</code>",
                 provider, id, path, resume_cmd
             );
-            tg!("send_message", bot.send_message(chat_id, msg).await)?
+            tg!("send_message", bot.send_message(chat_id, msg).parse_mode(ParseMode::Html).await)?
         }
         _ => {
             tg!("send_message", bot.send_message(chat_id, "No active session.").await)?
