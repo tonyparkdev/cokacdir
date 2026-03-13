@@ -848,6 +848,34 @@ fn build_system_prompt(role: &str, current_path: &str, chat_id: i64, bot_key: &s
     } else {
         String::new()
     };
+    let group_chat_cowork_section = if !bot_username.is_empty() && is_group_chat {
+        String::from(
+            "\n\n\
+             ── GROUP CHAT CO-WORK CONTEXT ──\n\
+             You are one of multiple bots operating in this group chat.\n\n\
+             IMPORTANT — HOW GROUP CHAT WORKS FOR BOTS:\n\
+             • Your conversations with users are invisible to other bots until YOU actively share via --message\n\
+               or they check the shared log (--read_chat_log). If another bot needs to know, proactively share.\n\
+             • Likewise, other bots' conversations are invisible to you until they share or you check the shared log\n\
+               (--read_chat_log) to see what they have been discussing.\n\
+             • Each bot maintains its own independent session and working directory.\n\
+               Other bots may be looking at completely different folders than you.\n\
+               When co-working, always share your full working directory path so other bots know where you are operating.\n\n\
+             FOR EFFECTIVE CO-WORK, BE AWARE OF:\n\
+             1. WHO is here — Check the group chat log to discover which bots are active in this chat.\n\
+             2. WHERE each bot works — Other bots may have different working directories. Check the log or ask them via --message.\n\
+             3. WHAT each bot is doing — Read the log to understand ongoing tasks before starting your own.\n\
+             4. SHARED GOAL — When the user gives a collaborative task, understand the overall objective and your part in it.\n\n\
+             CO-WORK GUIDELINES:\n\
+             • Before starting work, check the chat log to understand the current state of collaboration.\n\
+             • Clearly state what you are working on — your messages are recorded in the shared log for other bots.\n\
+             • Before modifying shared files or directories, check the log to see if another bot is working on the same area.\n\
+             • When your work depends on or affects another bot's output, communicate via --message (described below).\n\
+             • If you need results from another bot's task, check the log first — the answer may already be there.",
+        )
+    } else {
+        String::new()
+    };
     let chat_id_line = if is_group_chat {
         format!("Chat ID: {}\n", chat_id)
     } else {
@@ -904,7 +932,7 @@ fn build_system_prompt(role: &str, current_path: &str, chat_id: i64, bot_key: &s
          \"{bin}\" --cron-update <SCHEDULE_ID> --at \"<NEW_TIME>\" --chat {chat_id} --key {bot_key}\n\
          • --at accepts the same formats as --cron\n\
          • Output: {{\"status\":\"ok\",\"id\":\"...\",\"schedule\":\"...\"}}\n\n\
-         ═══════════════════════════════════════{group_chat_log_section}{bot_messaging_section}{disabled_notice}",
+         ═══════════════════════════════════════{group_chat_cowork_section}{group_chat_log_section}{bot_messaging_section}{disabled_notice}",
         role = role,
         bot_username_line = bot_username_line,
         chat_id_line = chat_id_line,
@@ -914,6 +942,7 @@ fn build_system_prompt(role: &str, current_path: &str, chat_id: i64, bot_key: &s
         bin = shell_bin_path(),
         disabled_notice = disabled_notice,
         session_notice = session_notice,
+        group_chat_cowork_section = group_chat_cowork_section,
         group_chat_log_section = group_chat_log_section,
         bot_messaging_section = bot_messaging_section,
     )
