@@ -61,13 +61,16 @@ pub struct GroupChatLogEntry {
     pub ts: String,
     /// Bot username that handled this message (without @)
     pub bot: String,
-    /// "user" or "assistant"
+    /// "user" or "assistant" (or "system" for clear markers)
     pub role: String,
     /// Display name of the sender (for user messages)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub from: Option<String>,
     /// Message text content
     pub text: String,
+    /// If true, this entry is a clear marker — all previous entries from this bot should be ignored
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub clear: bool,
 }
 
 /// Return the directory for group chat logs: ~/.cokacdir/group_chat/
@@ -130,7 +133,9 @@ pub fn read_group_chat_log_range(
 
     let reader = std::io::BufReader::new(&file);
     use std::io::BufRead;
-    let entries: Vec<(usize, GroupChatLogEntry)> = reader.lines()
+
+    // First pass: collect all entries and find the last clear marker per bot
+    let all_entries: Vec<(usize, GroupChatLogEntry)> = reader.lines()
         .filter_map(|line| line.ok())
         .enumerate()
         .filter_map(|(i, line)| {
@@ -139,7 +144,25 @@ pub fn read_group_chat_log_range(
                 .ok()
                 .map(|entry| (line_num, entry))
         })
+        .collect();
+
+    // Build a map of bot -> last clear marker line number
+    let mut last_clear: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for (line_num, entry) in &all_entries {
+        if entry.clear {
+            last_clear.insert(entry.bot.clone(), *line_num);
+        }
+    }
+
+    // Second pass: filter entries, skipping those before the clear marker for each bot
+    let entries: Vec<(usize, GroupChatLogEntry)> = all_entries.into_iter()
         .filter(|(line_num, entry)| {
+            // Skip clear marker entries themselves
+            if entry.clear { return false; }
+            // Skip entries from a bot that are before its last clear marker
+            if let Some(&clear_line) = last_clear.get(&entry.bot) {
+                if *line_num <= clear_line { return false; }
+            }
             let in_range = *line_num >= range_start
                 && range_end.map_or(true, |end| *line_num <= end);
             let bot_match = filter_bot.map_or(true, |bot| entry.bot == bot);
@@ -3021,7 +3044,7 @@ async fn handle_clear_command(
     state: &SharedState,
 ) -> ResponseResult<()> {
     msg_debug(&format!("[handle_clear] chat_id={}", chat_id.0));
-    let (current_path, provider, orphan_stop_msg) = {
+    let (current_path, provider, orphan_stop_msg, bot_username) = {
         let mut data = state.lock().await;
         let path = data.sessions.get(&chat_id).and_then(|s| s.current_path.clone());
         let old_sid = data.sessions.get(&chat_id).and_then(|s| s.session_id.clone());
@@ -3035,7 +3058,8 @@ async fn handle_clear_command(
         let mdl = get_model(&data.settings, chat_id);
         let prov = if codex::is_codex_model(mdl.as_deref()) { "codex" } else { "claude" };
         let stop_msg = data.stop_message_ids.remove(&chat_id);
-        (path, prov.to_string(), stop_msg)
+        let uname = data.bot_username.clone();
+        (path, prov.to_string(), stop_msg, uname)
     };
 
     // Delete orphaned "Stopping..." message if /stop raced with completion
@@ -3073,6 +3097,20 @@ async fn handle_clear_command(
             for file_path in cleared_files.iter().skip(1) {
                 let _ = fs::remove_file(file_path);
             }
+        }
+    }
+
+    // Append clear marker to group chat log so other bots skip this bot's old entries
+    if chat_id.0 < 0 {
+        if !bot_username.is_empty() {
+            append_group_chat_log(chat_id.0, &GroupChatLogEntry {
+                ts: chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string(),
+                bot: bot_username,
+                role: "system".to_string(),
+                from: None,
+                text: "Session cleared.".to_string(),
+                clear: true,
+            });
         }
     }
 
@@ -3410,6 +3448,7 @@ async fn handle_file_upload(
                 role: "user".to_string(),
                 from: Some(user_display_name.to_string()),
                 text: upload_record,
+                clear: false,
             });
         }
     }
@@ -3718,6 +3757,7 @@ async fn handle_shell_command(
                         role: "user".to_string(),
                         from: Some(shell_user_display_name.clone()),
                         text: format!("!{}", cmd_display_owned),
+                        clear: false,
                     });
                     let output_summary = if full_output.trim().is_empty() {
                         format!("(exit code: {})", exit_code)
@@ -3730,6 +3770,7 @@ async fn handle_shell_command(
                         role: "assistant".to_string(),
                         from: None,
                         text: output_summary,
+                        clear: false,
                     });
                 }
             }
@@ -3778,6 +3819,7 @@ async fn handle_shell_command(
                     role: "user".to_string(),
                     from: Some(shell_user_display_name.clone()),
                     text: format!("!{} [Stopped]", cmd_display_owned),
+                    clear: false,
                 });
                 if !full_output.trim().is_empty() {
                     append_group_chat_log(chat_id.0, &GroupChatLogEntry {
@@ -3786,6 +3828,7 @@ async fn handle_shell_command(
                         role: "assistant".to_string(),
                         from: None,
                         text: format!("[Stopped] exit code: -1\n{}", full_output.trim()),
+                        clear: false,
                     });
                 }
             }
@@ -4854,6 +4897,7 @@ async fn handle_text_message(
                             role: "user".to_string(),
                             from: Some(user_display_name_owned.clone()),
                             text: user_text_owned.clone(),
+                            clear: false,
                         });
                         if !raw_payload.is_empty() {
                             msg_debug(&format!("[polling] JSONL: writing user+assistant entries, raw_payload_len={}", raw_payload.len()));
@@ -4863,6 +4907,7 @@ async fn handle_text_message(
                                 role: "assistant".to_string(),
                                 from: None,
                                 text: std::mem::take(&mut raw_payload),
+                                clear: false,
                             });
                         } else {
                             msg_debug(&format!("[polling] JSONL: user entry written, assistant SKIPPED (raw_payload is empty)"));
@@ -4979,6 +5024,7 @@ async fn handle_text_message(
                         role: "user".to_string(),
                         from: Some(user_display_name_owned.clone()),
                         text: user_text_owned,
+                        clear: false,
                     });
                     if !raw_payload.is_empty() {
                         msg_debug(&format!("[polling] JSONL stopped: writing user+assistant entries, raw_payload_len={}", raw_payload.len()));
@@ -4988,6 +5034,7 @@ async fn handle_text_message(
                             role: "assistant".to_string(),
                             from: None,
                             text: std::mem::take(&mut raw_payload),
+                            clear: false,
                         });
                     } else {
                         msg_debug(&format!("[polling] JSONL stopped: user entry written, assistant SKIPPED (raw_payload is empty)"));
@@ -6586,6 +6633,7 @@ async fn execute_schedule(
                 role: "user".to_string(),
                 from: Some("scheduled_task".to_string()),
                 text: entry_clone.prompt.clone(),
+                clear: false,
             });
             if !raw_payload.is_empty() {
                 sched_debug(&format!("[sched] JSONL: writing user+assistant entries, raw_payload_len={}", raw_payload.len()));
@@ -6595,6 +6643,7 @@ async fn execute_schedule(
                     role: "assistant".to_string(),
                     from: None,
                     text: std::mem::take(&mut raw_payload),
+                    clear: false,
                 });
             } else {
                 sched_debug(&format!("[sched] JSONL: user entry written, assistant SKIPPED (raw_payload is empty)"));
@@ -7125,6 +7174,7 @@ async fn process_bot_message(
                             role: "user".to_string(),
                             from: Some(format!("bot:{}", from_bot_for_log)),
                             text: prompt_owned.clone(),
+                            clear: false,
                         });
                         if !raw_payload.is_empty() {
                             msg_debug(&format!("[botmsg_poll:{}] JSONL: writing user+assistant entries, raw_payload_len={}", bmsg_id_for_log, raw_payload.len()));
@@ -7134,6 +7184,7 @@ async fn process_bot_message(
                                 role: "assistant".to_string(),
                                 from: None,
                                 text: std::mem::take(&mut raw_payload),
+                                clear: false,
                             });
                         } else {
                             msg_debug(&format!("[botmsg_poll:{}] JSONL: user entry written, assistant SKIPPED (raw_payload is empty)", bmsg_id_for_log));
@@ -7227,6 +7278,7 @@ async fn process_bot_message(
                         role: "user".to_string(),
                         from: Some(format!("bot:{}", from_bot_for_log)),
                         text: prompt_owned,
+                        clear: false,
                     });
                     if !raw_payload.is_empty() {
                         msg_debug(&format!("[botmsg_poll:{}] JSONL stopped: writing user+assistant entries, raw_payload_len={}", bmsg_id_for_log, raw_payload.len()));
@@ -7236,6 +7288,7 @@ async fn process_bot_message(
                             role: "assistant".to_string(),
                             from: None,
                             text: std::mem::take(&mut raw_payload),
+                            clear: false,
                         });
                     } else {
                         msg_debug(&format!("[botmsg_poll:{}] JSONL stopped: user entry written, assistant SKIPPED (raw_payload is empty)", bmsg_id_for_log));
