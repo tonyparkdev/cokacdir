@@ -86,7 +86,7 @@ pub struct RawPayloadEntry {
 }
 
 /// Check if a line starts with a `[TagName] ` pattern where TagName is ASCII alphabetic.
-/// Returns Some(tag_name) if matched, None otherwise.
+/// Returns Some("[TagName]") if matched, None otherwise.
 fn detect_raw_payload_tag(line: &str) -> Option<&str> {
     let rest = line.strip_prefix('[')?;
     let end = rest.find(']')?;
@@ -144,26 +144,52 @@ pub fn parse_payload_auto(text: &str) -> Vec<RawPayloadEntry> {
     parse_raw_payload(text)
 }
 
+/// Maximum content length before truncation and offloading to a separate file.
+const PAYLOAD_TRUNCATE_LIMIT: usize = 500;
+
+/// Save long content to ~/.cokacdir/values/<unique>.txt and return the file path.
+/// Returns None if saving fails.
+fn save_payload_value(content: &str) -> Option<String> {
+    let dir = dirs::home_dir()?.join(".cokacdir").join("values");
+    if fs::create_dir_all(&dir).is_err() { return None; }
+    let ts = chrono::Local::now().format("%Y%m%d%H%M%S");
+    use rand::Rng;
+    let rand_suffix: String = rand::thread_rng()
+        .sample_iter(&rand::distributions::Alphanumeric)
+        .take(6)
+        .map(|b| (b as char).to_ascii_lowercase())
+        .collect();
+    let filename = format!("{}_{}.txt", ts, rand_suffix);
+    let path = dir.join(&filename);
+    if fs::write(&path, content).is_err() { return None; }
+    Some(path.display().to_string())
+}
+
+/// Truncate payload entries whose content exceeds the limit.
+/// Long content is saved to ~/.cokacdir/values/ and replaced with a truncated preview + file path.
+fn truncate_payload_entries(entries: &[RawPayloadEntry]) -> Vec<RawPayloadEntry> {
+    entries.iter().map(|entry| {
+        if entry.content.chars().count() <= PAYLOAD_TRUNCATE_LIMIT {
+            entry.clone()
+        } else {
+            let preview: String = entry.content.chars().take(PAYLOAD_TRUNCATE_LIMIT).collect();
+            let truncated_content = if let Some(path) = save_payload_value(&entry.content) {
+                format!("{}...\n(truncated, full content: {})", preview, path)
+            } else {
+                format!("{}...\n(truncated, failed to save full content)", preview)
+            };
+            RawPayloadEntry { tag: entry.tag.clone(), content: truncated_content }
+        }
+    }).collect()
+}
+
 /// Serialize payload entries to JSON string (new format).
+/// Entries with content exceeding the limit are truncated and offloaded to separate files.
 pub fn serialize_payload(entries: &[RawPayloadEntry]) -> String {
-    serde_json::to_string(entries).unwrap_or_default()
+    let processed = truncate_payload_entries(entries);
+    serde_json::to_string(&processed).unwrap_or_default()
 }
 
-/// Return entries excluding the specified tags.
-pub fn filter_raw_payload_exclude(entries: &[RawPayloadEntry], exclude_tags: &[&str]) -> Vec<RawPayloadEntry> {
-    entries.iter()
-        .filter(|e| !exclude_tags.iter().any(|t| e.tag == *t))
-        .cloned()
-        .collect()
-}
-
-/// Return only entries matching the specified tags.
-pub fn filter_raw_payload_include(entries: &[RawPayloadEntry], include_tags: &[&str]) -> Vec<RawPayloadEntry> {
-    entries.iter()
-        .filter(|e| include_tags.iter().any(|t| e.tag == *t))
-        .cloned()
-        .collect()
-}
 
 /// RAII guard for group chat exclusive lock.
 /// Ensures only one bot processes at a time within the same group chat.
@@ -216,6 +242,14 @@ fn append_group_chat_log(chat_id: i64, entry: &GroupChatLogEntry) {
 
     // Serialize before acquiring lock to minimize lock hold time
     let Ok(json) = serde_json::to_string(entry) else { return };
+
+    // Skip entries containing --read_chat_log to prevent recursive snowball growth:
+    // each --read_chat_log result embeds the entire log, causing exponential JSONL inflation.
+    if json.contains("--read_chat_log") {
+        msg_debug(&format!("[append_group_chat_log] SKIPPED: line contains --read_chat_log (len={})", json.len()));
+        return;
+    }
+
     let line = format!("{}\n", json);
 
     // Lock via a dedicated lock file (not the data file itself)
@@ -968,8 +1002,7 @@ fn build_system_prompt(role: &str, current_path: &str, chat_id: i64, bot_key: &s
                 if parsed.is_empty() {
                     entry.text.clone()
                 } else {
-                    let filtered = filter_raw_payload_exclude(&parsed, &["ToolResult", "Error"]);
-                    format_raw_payload(&filtered)
+                    format_raw_payload(&parsed)
                 }
             } else {
                 entry.text.clone()
@@ -5206,8 +5239,8 @@ async fn handle_text_message(
                                     let summary = format_tool_input(&name, &input);
                                     let ts = chrono::Local::now().format("%H:%M:%S");
                                     println!("  [{ts}]   ⚙ {name}: {summary}");
-                                    msg_debug(&format!("[polling] ToolUse: name={}, pending_cokacdir={}, silent_mode={}, response_len={}, ends_with_nl={}",
-                                        name, pending_cokacdir, silent_mode, full_response.len(), full_response.ends_with('\n')));
+                                    msg_debug(&format!("[polling] ToolUse: name={}, input_preview={:?}, pending_cokacdir={}, silent_mode={}, response_len={}, ends_with_nl={}",
+                                        name, truncate_str(&input, 200), pending_cokacdir, silent_mode, full_response.len(), full_response.ends_with('\n')));
                                     raw_entries.push(RawPayloadEntry { tag: "ToolUse".into(), content: format!("{}: {}", name, input) });
                                     if !pending_cokacdir && !silent_mode {
                                         if name == "Bash" {
@@ -5224,6 +5257,10 @@ async fn handle_text_message(
                                     }
                                 }
                                 StreamMessage::ToolResult { content, is_error } => {
+                                    msg_debug(&format!("[polling] ToolResult: is_error={}, content_len={}, pending_cokacdir={}, last_tool={}", is_error, content.len(), pending_cokacdir, last_tool_name));
+                                    if is_error {
+                                        msg_debug(&format!("[polling] ToolResult ERROR: last_tool={}, content_preview={:?}", last_tool_name, truncate_str(&content, 300)));
+                                    }
                                     raw_entries.push(RawPayloadEntry { tag: "ToolResult".into(), content: format!("is_error={}, content={}", is_error, content) });
                                     if std::mem::take(&mut pending_cokacdir) {
                                         let ts = chrono::Local::now().format("%H:%M:%S");
@@ -5236,7 +5273,7 @@ async fn handle_text_message(
                                                 full_response.push_str(&format!("\n{}\n", formatted));
                                             }
                                         }
-                                    } else if is_error {
+                                    } else if is_error && !silent_mode {
                                         let ts = chrono::Local::now().format("%H:%M:%S");
                                         println!("  [{ts}]   ✗ Error: {content}");
                                         let truncated = truncate_str(&content, 500);
@@ -5567,7 +5604,7 @@ async fn handle_text_message(
                                 clear: false,
                             });
                         } else {
-                            msg_debug(&format!("[polling] JSONL: user entry written, assistant SKIPPED (raw_payload is empty)"));
+                            msg_debug(&format!("[polling] JSONL: user entry written, assistant SKIPPED (raw_entries is empty)"));
                         }
                     }
                 }
@@ -5746,7 +5783,7 @@ async fn handle_text_message(
                             clear: false,
                         });
                     } else {
-                        msg_debug(&format!("[polling] JSONL stopped: user entry written, assistant SKIPPED (raw_payload is empty)"));
+                        msg_debug(&format!("[polling] JSONL stopped: user entry written, assistant SKIPPED (raw_entries is empty)"));
                     }
                 }
             }
@@ -7083,8 +7120,8 @@ async fn execute_schedule(
                                 let summary = format_tool_input(&name, &input);
                                 let ts = chrono::Local::now().format("%H:%M:%S");
                                 println!("  [{ts}]   ⚙ [Schedule] {name}: {summary}");
-                                sched_debug(&format!("[schedule_polling] ToolUse: name={}, pending_cokacdir={}, silent_mode={}, response_len={}, ends_with_nl={}",
-                                    name, pending_cokacdir, silent_mode, full_response.len(), full_response.ends_with('\n')));
+                                sched_debug(&format!("[schedule_polling] ToolUse: name={}, input_preview={:?}, pending_cokacdir={}, silent_mode={}, response_len={}, ends_with_nl={}",
+                                    name, truncate_str(&input, 200), pending_cokacdir, silent_mode, full_response.len(), full_response.ends_with('\n')));
                                 raw_entries.push(RawPayloadEntry { tag: "ToolUse".into(), content: format!("{}: {}", name, input) });
                                 if !pending_cokacdir && !silent_mode {
                                     if name == "Bash" {
@@ -7101,6 +7138,10 @@ async fn execute_schedule(
                                 }
                             }
                             StreamMessage::ToolResult { content, is_error } => {
+                                sched_debug(&format!("[schedule_polling] ToolResult: is_error={}, content_len={}, pending_cokacdir={}, last_tool={}", is_error, content.len(), pending_cokacdir, last_tool_name));
+                                if is_error {
+                                    sched_debug(&format!("[schedule_polling] ToolResult ERROR: last_tool={}, content_preview={:?}", last_tool_name, truncate_str(&content, 300)));
+                                }
                                 raw_entries.push(RawPayloadEntry { tag: "ToolResult".into(), content: format!("is_error={}, content={}", is_error, content) });
                                 if std::mem::take(&mut pending_cokacdir) {
                                     let ts = chrono::Local::now().format("%H:%M:%S");
@@ -7113,7 +7154,7 @@ async fn execute_schedule(
                                             full_response.push_str(&format!("\n{}\n", formatted));
                                         }
                                     }
-                                } else if is_error {
+                                } else if is_error && !silent_mode {
                                     let truncated = truncate_str(&content, 500);
                                     if truncated.contains('\n') {
                                         full_response.push_str(&format!("\n```\n{}\n```\n", truncated));
@@ -7501,7 +7542,7 @@ async fn execute_schedule(
                     clear: false,
                 });
             } else {
-                sched_debug(&format!("[sched] JSONL: user entry written, assistant SKIPPED (raw_payload is empty)"));
+                sched_debug(&format!("[sched] JSONL: user entry written, assistant SKIPPED (raw_entries is empty)"));
             }
         }
 
@@ -7842,8 +7883,8 @@ async fn process_bot_message(
                                     let summary = format_tool_input(&name, &input);
                                     let ts = chrono::Local::now().format("%H:%M:%S");
                                     println!("  [{ts}]   ⚙ [BotMsg] {name}: {summary}");
-                                    msg_debug(&format!("[botmsg_poll:{}] ToolUse: name={}, pending_cokacdir={}, silent={}, response_len={}, ends_nl={}",
-                                        bmsg_id_for_log, name, pending_cokacdir, silent_mode, full_response.len(), full_response.ends_with('\n')));
+                                    msg_debug(&format!("[botmsg_poll:{}] ToolUse: name={}, input_preview={:?}, pending_cokacdir={}, silent={}, response_len={}, ends_nl={}",
+                                        bmsg_id_for_log, name, truncate_str(&input, 200), pending_cokacdir, silent_mode, full_response.len(), full_response.ends_with('\n')));
                                     raw_entries.push(RawPayloadEntry { tag: "ToolUse".into(), content: format!("{}: {}", name, input) });
                                     if !pending_cokacdir && !silent_mode {
                                         if name == "Bash" {
@@ -7859,6 +7900,9 @@ async fn process_bot_message(
                                 StreamMessage::ToolResult { content, is_error } => {
                                     msg_debug(&format!("[botmsg_poll:{}] ToolResult: is_error={}, content_len={}, pending_cokacdir={}, last_tool={}",
                                         bmsg_id_for_log, is_error, content.len(), pending_cokacdir, last_tool_name));
+                                    if is_error {
+                                        msg_debug(&format!("[botmsg_poll:{}] ToolResult ERROR: last_tool={}, content_preview={:?}", bmsg_id_for_log, last_tool_name, truncate_str(&content, 300)));
+                                    }
                                     raw_entries.push(RawPayloadEntry { tag: "ToolResult".into(), content: format!("is_error={}, content={}", is_error, content) });
                                     if std::mem::take(&mut pending_cokacdir) {
                                         let ts = chrono::Local::now().format("%H:%M:%S");
@@ -7873,7 +7917,7 @@ async fn process_bot_message(
                                                 full_response.push_str(&format!("\n{}\n", formatted));
                                             }
                                         }
-                                    } else if is_error {
+                                    } else if is_error && !silent_mode {
                                         msg_debug(&format!("[botmsg_poll:{}] tool error: {}", bmsg_id_for_log, truncate_str(&content, 200)));
                                         let truncated = truncate_str(&content, 500);
                                         if truncated.contains('\n') {
@@ -8183,7 +8227,7 @@ async fn process_bot_message(
                                 clear: false,
                             });
                         } else {
-                            msg_debug(&format!("[botmsg_poll:{}] JSONL: user entry written, assistant SKIPPED (raw_payload is empty)", bmsg_id_for_log));
+                            msg_debug(&format!("[botmsg_poll:{}] JSONL: user entry written, assistant SKIPPED (raw_entries is empty)", bmsg_id_for_log));
                         }
                     }
                 }
@@ -8315,7 +8359,7 @@ async fn process_bot_message(
                             clear: false,
                         });
                     } else {
-                        msg_debug(&format!("[botmsg_poll:{}] JSONL stopped: user entry written, assistant SKIPPED (raw_payload is empty)", bmsg_id_for_log));
+                        msg_debug(&format!("[botmsg_poll:{}] JSONL stopped: user entry written, assistant SKIPPED (raw_entries is empty)", bmsg_id_for_log));
                     }
                 }
             } else {
