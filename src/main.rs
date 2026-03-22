@@ -205,7 +205,17 @@ fn handle_read_group_chat(chat_id: i64, range_str: Option<&str>, filter_bot: Opt
         } else {
             bot_label
         };
-        println!("{:>5} [{}] {}{}: {}", line_num, entry.ts, role_display, from_info, entry.text);
+        let display_text = if entry.role == "assistant" {
+            let parsed = telegram::parse_payload_auto(&entry.text);
+            if parsed.is_empty() {
+                entry.text.clone()
+            } else {
+                telegram::format_raw_payload(&parsed)
+            }
+        } else {
+            entry.text.clone()
+        };
+        println!("{:>5} [{}] {}{}: {}", line_num, entry.ts, role_display, from_info, display_text);
     }
 }
 
