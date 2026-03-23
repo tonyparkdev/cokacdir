@@ -376,6 +376,8 @@ struct BotSettings {
     silent: HashMap<String, bool>,
     /// chat_id (string) → true if direct mode enabled (group chat without ; prefix)
     direct: HashMap<String, bool>,
+    /// chat_id (string) → number of recent group chat log entries to embed in system prompt (default 12)
+    context: HashMap<String, usize>,
     /// chat_id (string) → system instruction for AI
     instructions: HashMap<String, String>,
     /// Bot's Telegram username (stored at startup via get_me)
@@ -395,6 +397,7 @@ impl Default for BotSettings {
             debug: false,
             silent: HashMap::new(),
             direct: HashMap::new(),
+            context: HashMap::new(),
             instructions: HashMap::new(),
             username: String::new(),
             display_name: String::new(),
@@ -955,12 +958,12 @@ fn shell_bin_path() -> String {
 }
 
 /// Build the system prompt for Telegram AI sessions
-fn build_system_prompt(role: &str, current_path: &str, chat_id: i64, bot_key: &str, disabled_notice: &str, session_id: Option<&str>, bot_username: &str, bot_display_name: &str, user_message: Option<&str>) -> String {
+fn build_system_prompt(role: &str, current_path: &str, chat_id: i64, bot_key: &str, disabled_notice: &str, session_id: Option<&str>, bot_username: &str, bot_display_name: &str, user_message: Option<&str>, context_count: usize) -> String {
     msg_debug(&format!("[build_system_prompt] chat_id={}, bot_username={:?}, bot_display_name={:?}, session_id={:?}, disabled_notice_len={}, role_len={}",
         chat_id, bot_username, bot_display_name, session_id, disabled_notice.len(), role.len()));
-    let is_group_chat = chat_id < 0;
-    msg_debug(&format!("[build_system_prompt] is_group_chat={}, has_bot_username={}, include_bot_section={}",
-        is_group_chat, !bot_username.is_empty(), !bot_username.is_empty() && is_group_chat));
+    let is_group_chat = chat_id < 0 && context_count > 0;
+    msg_debug(&format!("[build_system_prompt] is_group_chat={}, context_count={}, has_bot_username={}, include_bot_section={}",
+        is_group_chat, context_count, !bot_username.is_empty(), !bot_username.is_empty() && is_group_chat));
     let session_notice = match session_id {
         Some(sid) => format!(
             "\n\n\
@@ -983,9 +986,9 @@ fn build_system_prompt(role: &str, current_path: &str, chat_id: i64, bot_key: &s
         String::new()
     };
     let group_chat_log_section = if is_group_chat {
-        // Fetch the last 12 log entries to embed directly in the prompt
+        // Fetch the last N log entries to embed directly in the prompt
         let recent_entries = read_group_chat_log_range(chat_id, 1, None, None);
-        let start = recent_entries.len().saturating_sub(12);
+        let start = recent_entries.len().saturating_sub(context_count);
         let recent_lines: String = recent_entries[start..].iter().map(|(_, entry)| {
             let bot_label = match &entry.bot_display_name {
                 Some(dn) if !dn.is_empty() => format!("{}(@{})", dn, entry.bot),
@@ -1569,6 +1572,13 @@ fn load_bot_settings(token: &str) -> BotSettings {
             .collect())
         .unwrap_or_default();
 
+    let context: HashMap<String, usize> = entry.get("context")
+        .and_then(|v| v.as_object())
+        .map(|obj| obj.iter()
+            .filter_map(|(k, v)| v.as_u64().map(|n| (k.clone(), n as usize)))
+            .collect())
+        .unwrap_or_default();
+
     let instructions: HashMap<String, String> = entry.get("instructions")
         .and_then(|v| v.as_object())
         .map(|obj| obj.iter()
@@ -1586,7 +1596,7 @@ fn load_bot_settings(token: &str) -> BotSettings {
         .unwrap_or("")
         .to_string();
 
-    BotSettings { allowed_tools, last_sessions, owner_user_id, as_public_for_group_chat, models, debug, silent, direct, instructions, username, display_name }
+    BotSettings { allowed_tools, last_sessions, owner_user_id, as_public_for_group_chat, models, debug, silent, direct, context, instructions, username, display_name }
 }
 
 /// Save bot settings to bot_settings.json
@@ -1622,6 +1632,7 @@ fn save_bot_settings(token: &str, settings: &BotSettings) {
         "debug": settings.debug,
         "silent": settings.silent,
         "direct": settings.direct,
+        "context": settings.context,
         "instructions": settings.instructions,
         "username": settings.username,
         "display_name": settings.display_name,
@@ -1853,6 +1864,7 @@ pub async fn run_bot(token: &str) {
         teloxide::types::BotCommand::new("debug", "Toggle debug logging"),
         teloxide::types::BotCommand::new("silent", "Toggle silent mode (hide tool calls)"),
         teloxide::types::BotCommand::new("direct", "Toggle direct mode (group only)"),
+        teloxide::types::BotCommand::new("context", "Set group chat log context count"),
         teloxide::types::BotCommand::new("query", "Send message to AI (/query@bot for groups)"),
         teloxide::types::BotCommand::new("instruction", "Set system instruction for this chat"),
         teloxide::types::BotCommand::new("instruction_clear", "Clear system instruction"),
@@ -2396,6 +2408,10 @@ async fn handle_message(
         msg_debug("[handle_message] routing → /direct");
         println!("  [{timestamp}] ◀ [{user_name}] /direct");
         handle_direct_command(&bot, chat_id, &msg, &state, token, is_owner).await?;
+    } else if text.starts_with("/context") {
+        msg_debug("[handle_message] routing → /context");
+        println!("  [{timestamp}] ◀ [{user_name}] /context {}", text.strip_prefix("/context").unwrap_or("").trim());
+        handle_context_command(&bot, chat_id, &text, &state, token, is_group_chat).await?;
     } else if text.starts_with("/query") {
         let body = text.strip_prefix("/query").unwrap_or("").trim();
         if body.is_empty() {
@@ -2497,6 +2513,7 @@ AI can read, edit, and run commands in your session.
 <code>/public on</code> — Allow all members to use bot
 <code>/public off</code> — Owner only (default)
 <code>/direct</code> — Toggle direct mode (no ; prefix needed)
+<code>/context &lt;N&gt;</code> — Set group chat log entries in prompt (0=off, default 12)
 
 <b>Schedule</b>
 Ask in natural language to manage schedules.
@@ -4608,6 +4625,63 @@ async fn handle_direct_command(
     Ok(())
 }
 
+/// Handle /context command - set number of group chat log entries to embed in system prompt
+async fn handle_context_command(
+    bot: &Bot,
+    chat_id: ChatId,
+    text: &str,
+    state: &SharedState,
+    token: &str,
+    is_group_chat: bool,
+) -> ResponseResult<()> {
+    if !is_group_chat {
+        shared_rate_limit_wait(state, chat_id).await;
+        tg!("send_message", bot.send_message(chat_id, "This command is only available in group chats.").await)?;
+        return Ok(());
+    }
+
+    let arg = text.strip_prefix("/context").unwrap_or("").trim();
+    let key = chat_id.0.to_string();
+
+    if arg.is_empty() {
+        let data = state.lock().await;
+        let current = data.settings.context.get(&key).copied().unwrap_or(12);
+        shared_rate_limit_wait(state, chat_id).await;
+        tg!("send_message", bot.send_message(chat_id, format!(
+            "Group chat log context: <b>{}</b> entries\n\n\
+             <code>/context &lt;N&gt;</code> — Set count (0 to disable)\n\
+             Default: 12",
+            current
+        )).parse_mode(teloxide::types::ParseMode::Html).await)?;
+        return Ok(());
+    }
+
+    let Ok(n) = arg.parse::<usize>() else {
+        shared_rate_limit_wait(state, chat_id).await;
+        tg!("send_message", bot.send_message(chat_id, "Usage: /context <number>\nExample: /context 20, /context 0 (disable)").await)?;
+        return Ok(());
+    };
+
+    {
+        let mut data = state.lock().await;
+        if n == 12 {
+            data.settings.context.remove(&key);
+        } else {
+            data.settings.context.insert(key, n);
+        }
+        save_bot_settings(token, &data.settings);
+    }
+
+    let msg = if n == 0 {
+        "Group chat log context: <b>OFF</b> (no log entries in prompt)".to_string()
+    } else {
+        format!("Group chat log context: <b>{}</b> entries", n)
+    };
+    shared_rate_limit_wait(state, chat_id).await;
+    tg!("send_message", bot.send_message(chat_id, msg).parse_mode(teloxide::types::ParseMode::Html).await)?;
+    Ok(())
+}
+
 /// Handle /instruction command - set or view system instruction for this chat
 async fn handle_instruction_command(
     bot: &Bot,
@@ -5011,7 +5085,7 @@ async fn handle_text_message(
     }
 
     // Get session info, allowed tools, model, pending uploads, history, instruction, and bot_username (drop lock before any await)
-    let (session_info, allowed_tools, pending_uploads, model, history, instruction, bot_username_for_prompt, bot_display_name_for_prompt) = {
+    let (session_info, allowed_tools, pending_uploads, model, history, instruction, context_count, bot_username_for_prompt, bot_display_name_for_prompt) = {
         let mut data = state.lock().await;
         let info = data.sessions.get(&chat_id).and_then(|session| {
             session.current_path.as_ref().map(|_| {
@@ -5028,11 +5102,12 @@ async fn handle_text_message(
             .map(|s| std::mem::take(&mut s.pending_uploads))
             .unwrap_or_default();
         let instr = data.settings.instructions.get(&chat_id.0.to_string()).cloned();
+        let ctx_count = data.settings.context.get(&chat_id.0.to_string()).copied().unwrap_or(12);
         let buname = data.bot_username.clone();
         let bdname = data.bot_display_name.clone();
         msg_debug(&format!("[handle_text_message] session_id={:?}, current_path={:?}, model={:?}, uploads={}, history_len={}, instruction={:?}",
             info.as_ref().map(|(sid, _)| sid), info.as_ref().map(|(_, p)| p), mdl, uploads.len(), hist.len(), instr.is_some()));
-        (info, tools, uploads, mdl, hist, instr, buname, bdname)
+        (info, tools, uploads, mdl, hist, instr, ctx_count, buname, bdname)
     };
 
     let (session_id, current_path) = match session_info {
@@ -5100,7 +5175,7 @@ async fn handle_text_message(
         &role,
         &current_path, chat_id.0, &bot_key_for_prompt, &disabled_notice,
         session_id.as_deref(), &bot_username_for_prompt, &bot_display_name_for_prompt,
-        Some(user_text),
+        Some(user_text), context_count,
     );
 
     // Create channel for streaming
@@ -7005,9 +7080,10 @@ async fn execute_schedule(
     };
 
     let bot_key = token_hash(token);
-    let (sched_instruction, sched_bot_username, sched_bot_display_name) = {
+    let (sched_instruction, sched_context_count, sched_bot_username, sched_bot_display_name) = {
         let data = state.lock().await;
-        (data.settings.instructions.get(&chat_id.0.to_string()).cloned(), data.bot_username.clone(), data.bot_display_name.clone())
+        let ctx = data.settings.context.get(&chat_id.0.to_string()).copied().unwrap_or(12);
+        (data.settings.instructions.get(&chat_id.0.to_string()).cloned(), ctx, data.bot_username.clone(), data.bot_display_name.clone())
     };
     let sched_role = {
         let base = format!(
@@ -7030,6 +7106,7 @@ async fn execute_schedule(
         None, // scheduled tasks don't need to register further schedules with session context
         &sched_bot_username, &sched_bot_display_name,
         None, // scheduled tasks: no user message dedup
+        sched_context_count,
     );
 
     // Retrieve pre-inserted cancel token (from scheduler_loop), or create a new one
@@ -7657,7 +7734,7 @@ async fn process_bot_message(
     auto_restore_session(state, chat_id, &format!("bot:{}", msg.from)).await;
 
     // Get session info, allowed tools, model, history, instruction
-    let (session_info, allowed_tools, model, history, instruction) = {
+    let (session_info, allowed_tools, model, history, instruction, context_count) = {
         let data = state.lock().await;
         let info = data.sessions.get(&chat_id).and_then(|session| {
             session.current_path.as_ref().map(|_| {
@@ -7670,9 +7747,10 @@ async fn process_bot_message(
             .map(|s| s.history.clone())
             .unwrap_or_default();
         let instr = data.settings.instructions.get(&chat_id.0.to_string()).cloned();
+        let ctx = data.settings.context.get(&chat_id.0.to_string()).copied().unwrap_or(12);
         msg_debug(&format!("[process_bot_message] session_info={}, tools={}, model={:?}, history_len={}, instruction={}",
             info.is_some(), tools.len(), mdl, hist.len(), instr.is_some()));
-        (info, tools, mdl, hist, instr)
+        (info, tools, mdl, hist, instr, ctx)
     };
 
     let (session_id, current_path) = match session_info {
@@ -7746,6 +7824,7 @@ async fn process_bot_message(
         &current_path, chat_id.0, &bot_key, &disabled_notice,
         session_id.as_deref(), bot_username, bot_display_name,
         None, // bot-to-bot messages: no user message dedup
+        context_count,
     );
     msg_debug(&format!("[process_bot_message] system_prompt built, len={}", system_prompt_owned.len()));
 
