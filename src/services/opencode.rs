@@ -632,8 +632,51 @@ fn normalize_tool_name(name: &str) -> String {
         "enterplanmode" => "EnterPlanMode",
         "exitplanmode" => "ExitPlanMode",
         "codesearch" => "Grep",
+        "apply_patch" => "Edit",
         _ => name,
     }.to_string()
+}
+
+/// Normalize OpenCode tool input field names to Claude-compatible names.
+fn normalize_opencode_params(tool: &str, input: &Value) -> Value {
+    let Some(obj) = input.as_object() else { return input.clone() };
+    let mut out = obj.clone();
+
+    match tool {
+        "read" => {
+            // filePath → file_path
+            if out.contains_key("filePath") && !out.contains_key("file_path") {
+                if let Some(v) = out.remove("filePath") {
+                    out.insert("file_path".to_string(), v);
+                }
+            }
+        }
+        "apply_patch" => {
+            // Extract file_path from patchText for display
+            if let Some(patch) = out.get("patchText").and_then(|v| v.as_str()) {
+                let file_path = patch.lines()
+                    .find_map(|l| {
+                        l.strip_prefix("*** Add File: ")
+                            .or_else(|| l.strip_prefix("*** Update File: "))
+                            .or_else(|| l.strip_prefix("*** Delete File: "))
+                    });
+                if let Some(fp) = file_path {
+                    out.insert("file_path".to_string(), Value::String(fp.to_string()));
+                }
+            }
+        }
+        "skill" => {
+            // name → skill
+            if out.contains_key("name") && !out.contains_key("skill") {
+                if let Some(v) = out.remove("name") {
+                    out.insert("skill".to_string(), v);
+                }
+            }
+        }
+        _ => {}
+    }
+
+    Value::Object(out)
 }
 
 /// Extract tool use info from an opencode `tool_use` event
@@ -645,9 +688,15 @@ fn parse_tool_use_event(json: &Value) -> Option<(String, String, String, String,
     let state = part.get("state")?;
     let status = state.get("status").and_then(|v| v.as_str()).unwrap_or("");
 
-    let input = state.get("input")
-        .map(|v| serde_json::to_string_pretty(v).unwrap_or_default())
-        .unwrap_or_default();
+    let raw_input = state.get("input").cloned().unwrap_or(Value::Object(Default::default()));
+    let normalized_input = normalize_opencode_params(raw_name, &raw_input);
+    if raw_input != normalized_input {
+        opencode_debug(&format!("[parse_tool_use] normalized params for {}: {:?}→{:?}",
+            raw_name,
+            raw_input.as_object().map(|o| o.keys().collect::<Vec<_>>()),
+            normalized_input.as_object().map(|o| o.keys().collect::<Vec<_>>())));
+    }
+    let input = serde_json::to_string_pretty(&normalized_input).unwrap_or_default();
 
     let (output, is_error) = match status {
         "completed" => {
@@ -810,8 +859,12 @@ pub fn execute_command(
                         }
                         "error" => {
                             let err_msg = json.get("error")
-                                .and_then(|v| v.get("message").or(Some(v)))
-                                .and_then(|v| v.as_str())
+                                .and_then(|v| {
+                                    v.get("message").and_then(|m| m.as_str())
+                                        .or_else(|| v.get("data").and_then(|d| d.get("message")).and_then(|m| m.as_str()))
+                                        .or_else(|| v.get("name").and_then(|n| n.as_str()))
+                                        .or_else(|| v.as_str())
+                                })
                                 .unwrap_or("Unknown error");
                             opencode_debug(&format!("[execute_command] ERROR event: {}", err_msg));
                             return ClaudeResponse {
@@ -1101,6 +1154,8 @@ pub fn execute_command_streaming(
                 let err_msg = json.get("error")
                     .and_then(|v| {
                         v.get("message").and_then(|m| m.as_str())
+                            .or_else(|| v.get("data").and_then(|d| d.get("message")).and_then(|m| m.as_str()))
+                            .or_else(|| v.get("name").and_then(|n| n.as_str()))
                             .or_else(|| v.as_str())
                     })
                     .unwrap_or("Unknown error")

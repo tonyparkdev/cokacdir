@@ -1964,7 +1964,7 @@ pub async fn run_bot(token: &str) {
             let last_path = data.settings.last_sessions.get(&cid.to_string())
                 .map(|p| p.as_str())
                 .unwrap_or("(unknown)");
-            let mut msg = format!("🟢 cokacdir started (v{})\n📂 Resuming session at {}", version, last_path);
+            let mut msg = format!("🟢 cokacdir started (v{})\n📂 Resuming session at {}\n💬 Join @cokacvibe for tips, updates, and community support\n⭐ Star us on GitHub: https://github.com/kstost/cokacdir", version, last_path);
             if let Some(ref notice) = update_notice {
                 msg.push('\n');
                 msg.push_str(notice);
@@ -7156,11 +7156,15 @@ fn format_tool_input(name: &str, input: &str) -> String {
         }
         "Edit" => {
             let fp = v.get("file_path").and_then(|v| v.as_str()).unwrap_or("");
-            let replace_all = v.get("replace_all").and_then(|v| v.as_bool()).unwrap_or(false);
-            if replace_all {
-                format!("Edit {} (replace all)", fp)
+            if !fp.is_empty() {
+                let replace_all = v.get("replace_all").and_then(|v| v.as_bool()).unwrap_or(false);
+                if replace_all {
+                    format!("Edit {} (replace all)", fp)
+                } else {
+                    format!("Edit {}", fp)
+                }
             } else {
-                format!("Edit {}", fp)
+                "Edit".to_string()
             }
         }
         "Glob" => {
@@ -8036,8 +8040,8 @@ async fn execute_schedule(
             schedule_id, cancelled, had_error, entry_clone.schedule_type, entry_clone.once, entry_clone.context_summary.is_some()));
         let sched_provider = detect_provider(model_for_summary.as_deref());
         let new_context_summary = if sched_provider != "claude" {
-            // Codex/Gemini: skip summary extraction (not supported via Claude API)
-            sched_debug(&format!("[execute_schedule] id={}, Codex backend — skipping context summary", schedule_id));
+            // Codex/Gemini/OpenCode: skip summary extraction (not supported via Claude API)
+            sched_debug(&format!("[execute_schedule] id={}, non-Claude backend — skipping context summary", schedule_id));
             None
         } else if !cancelled && !had_error && entry_clone.schedule_type == "cron" && !entry_clone.once.unwrap_or(false) && entry_clone.context_summary.is_some() {
             sched_debug(&format!("[execute_schedule] id={}, extracting result summary", schedule_id));

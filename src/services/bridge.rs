@@ -224,6 +224,81 @@ fn build_gemini_env(parsed: &BridgeArgs) -> Vec<(String, String)> {
 }
 
 // ============================================================
+// Normalize Gemini tool names to Claude-compatible names
+// ============================================================
+
+fn normalize_gemini_tool(name: &str) -> &str {
+    match name {
+        "run_shell_command" => "Bash",
+        "read_file" | "list_directory" => "Read",
+        "write_file" => "Write",
+        "replace" => "Edit",
+        "glob" => "Glob",
+        "grep_search" => "Grep",
+        "web_fetch" => "WebFetch",
+        "google_web_search" => "WebSearch",
+        "activate_skill" => "Skill",
+        "save_memory" => "Memory",
+        "codebase_investigator" | "generalist" | "cli_help" => "Task",
+        _ => name,
+    }
+}
+
+/// Normalize Gemini tool input field names to Claude-compatible names.
+fn normalize_gemini_params(tool: &str, params: &Value) -> Value {
+    let Some(obj) = params.as_object() else { return params.clone() };
+    let mut out = obj.clone();
+
+    // dir_path → path (glob, grep_search, list_directory, run_shell_command)
+    if out.contains_key("dir_path") && !out.contains_key("path") {
+        if let Some(v) = out.remove("dir_path") {
+            out.insert("path".to_string(), v);
+        }
+    }
+
+    match tool {
+        "replace" => {
+            // allow_multiple → replace_all
+            if out.contains_key("allow_multiple") && !out.contains_key("replace_all") {
+                if let Some(v) = out.remove("allow_multiple") {
+                    out.insert("replace_all".to_string(), v);
+                }
+            }
+        }
+        "web_fetch" => {
+            // prompt → url
+            if out.contains_key("prompt") && !out.contains_key("url") {
+                if let Some(v) = out.remove("prompt") {
+                    out.insert("url".to_string(), v);
+                }
+            }
+        }
+        "activate_skill" => {
+            // name → skill
+            if out.contains_key("name") && !out.contains_key("skill") {
+                if let Some(v) = out.remove("name") {
+                    out.insert("skill".to_string(), v);
+                }
+            }
+        }
+        "codebase_investigator" | "generalist" | "cli_help" => {
+            // objective/request/question → description
+            if !out.contains_key("description") {
+                for key in &["objective", "request", "question"] {
+                    if let Some(v) = out.remove(*key) {
+                        out.insert("description".to_string(), v);
+                        break;
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+
+    Value::Object(out)
+}
+
+// ============================================================
 // Stream-json transformer: gemini → Claude format
 // ============================================================
 
@@ -343,9 +418,17 @@ fn run_stream_json(parsed: &BridgeArgs, gemini_bin: &str) -> i32 {
             "tool_use" => {
                 let tool_id = json.get("tool_id").and_then(|v| v.as_str())
                     .unwrap_or("").to_string();
-                let tool_name = json.get("tool_name").and_then(|v| v.as_str())
-                    .unwrap_or("unknown").to_string();
-                let params = json.get("parameters").cloned().unwrap_or(Value::Object(Default::default()));
+                let raw_name = json.get("tool_name").and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
+                let tool_name = normalize_gemini_tool(raw_name);
+                let raw_params = json.get("parameters").cloned().unwrap_or(Value::Object(Default::default()));
+                let params = normalize_gemini_params(raw_name, &raw_params);
+                if raw_name != tool_name {
+                    bridge_debug(&format!("tool_use: normalized {}→{}, params_keys: {:?}→{:?}",
+                        raw_name, tool_name,
+                        raw_params.as_object().map(|o| o.keys().collect::<Vec<_>>()),
+                        params.as_object().map(|o| o.keys().collect::<Vec<_>>())));
+                }
                 emit_json(&serde_json::json!({
                     "type": "assistant",
                     "message": {
