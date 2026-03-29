@@ -2395,7 +2395,7 @@ async fn handle_message(
                             shared_rate_limit_wait(&state, chat_id).await;
                             if let Some((qid, qtxt)) = queue_result {
                                 let preview = truncate_str(&qtxt, 30);
-                                tg!("send_message", bot.send_message(chat_id, &format!("Queued ({qid}) \"{preview}\"\n- /stopall to cancel all\n- /stop {qid} to cancel this"))
+                                tg!("send_message", bot.send_message(chat_id, &format!("Queued ({qid}) \"{preview}\"\n- /stopall to cancel all\n- /stop_{qid} to cancel this"))
                                     .await)?;
                             } else {
                                 tg!("send_message", bot.send_message(chat_id, &format!("Queue full (max {}). Use /stopall to clear.", MAX_QUEUE_SIZE))
@@ -2679,7 +2679,7 @@ async fn handle_message(
                 shared_rate_limit_wait(&state, chat_id).await;
                 if let Some((qid, qtxt)) = queue_result {
                     let preview = truncate_str(&qtxt, 30);
-                    tg!("send_message", bot.send_message(chat_id, &format!("Queued ({qid}) \"{preview}\"\n- /stopall to cancel all\n- /stop {qid} to cancel this"))
+                    tg!("send_message", bot.send_message(chat_id, &format!("Queued ({qid}) \"{preview}\"\n- /stopall to cancel all\n- /stop_{qid} to cancel this"))
                         .await)?;
                 } else {
                     tg!("send_message", bot.send_message(chat_id, &format!("Queue full (max {}). Use /stopall to clear.", MAX_QUEUE_SIZE))
@@ -2709,6 +2709,10 @@ async fn handle_message(
             .and_then(|s| {
                 // Handle /stop@botname format
                 let s = if s.starts_with('@') { s.find(' ').map(|i| &s[i..]).unwrap_or("") } else { s };
+                // Strip leading underscore to support /stop_ID format (e.g. /stop_3EBA20E)
+                let s = s.strip_prefix('_').unwrap_or(s);
+                // Strip @botname suffix (for group chat: /stop_ID@botname)
+                let s = s.split('@').next().unwrap_or(s);
                 let trimmed = s.trim();
                 // Only treat as queue ID if it matches the exact format: 7 hex characters
                 if trimmed.len() == 7 && trimmed.chars().all(|c| c.is_ascii_hexdigit()) {
@@ -2875,7 +2879,7 @@ Manage server files &amp; chat with Claude AI.
 <code>/session</code> — Show current session ID
 <code>/clear</code> — Clear AI conversation history
 <code>/stop</code> — Stop current AI request
-<code>/stop &lt;ID&gt;</code> — Cancel a specific queued message
+<code>/stop_&lt;ID&gt;</code> — Cancel a specific queued message
 <code>/stopall</code> — Stop request and clear queue
 <code>/queue</code> — Toggle queue mode (queue messages while AI is busy)
 
