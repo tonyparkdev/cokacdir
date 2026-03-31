@@ -443,6 +443,8 @@ struct BotSettings {
     username: String,
     /// Bot's display name (first_name from Telegram API, stored at startup via get_me)
     display_name: String,
+    /// Compact startup greeting (show single line instead of full marketing message)
+    greeting: bool,
 }
 
 impl Default for BotSettings {
@@ -461,6 +463,7 @@ impl Default for BotSettings {
             queue: HashMap::new(),
             username: String::new(),
             display_name: String::new(),
+            greeting: false,
         }
     }
 }
@@ -548,6 +551,9 @@ fn log_incoming_message(msg: &Message, accepted: bool, reject_reason: &str) {
 
     let (msg_type, content) = if let Some(text) = msg.text() {
         ("text", text.to_string())
+    } else if msg.animation().is_some() {
+        // animation check must precede document: Telegram sets both fields for GIFs
+        ("animation", msg.caption().unwrap_or("").to_string())
     } else if let Some(doc) = msg.document() {
         let fname = doc.file_name.as_deref().unwrap_or("");
         let caption = msg.caption().unwrap_or("");
@@ -560,6 +566,12 @@ fn log_incoming_message(msg: &Message, accepted: bool, reject_reason: &str) {
         ("voice", String::new())
     } else if msg.video().is_some() {
         ("video", msg.caption().unwrap_or("").to_string())
+    } else if let Some(audio) = msg.audio() {
+        let fname = audio.file_name.as_deref().unwrap_or("");
+        let caption = msg.caption().unwrap_or("");
+        ("audio", format!("[{}] {}", fname, caption))
+    } else if msg.video_note().is_some() {
+        ("video_note", String::new())
     } else {
         ("other", String::new())
     };
@@ -1627,6 +1639,71 @@ async fn auto_restore_session(state: &SharedState, chat_id: ChatId, user_name: &
     }
 }
 
+/// Auto-create a workspace session under ~/.cokacdir/workspace/<random>.
+/// Returns (session_id, path) on success; None if filesystem fails.
+async fn auto_create_workspace_session(
+    state: &SharedState,
+    chat_id: ChatId,
+    bot_token: &str,
+) -> Option<(Option<String>, String)> {
+    msg_debug(&format!("[auto_workspace] chat_id={}, auto-creating workspace", chat_id.0));
+    let auto_path = {
+        let home = match dirs::home_dir() {
+            Some(h) => h,
+            None => {
+                msg_debug(&format!("[auto_workspace] chat_id={}, home_dir() returned None", chat_id.0));
+                return None;
+            }
+        };
+        let workspace_dir = home.join(".cokacdir").join("workspace");
+        use rand::Rng;
+        let random_name: String = rand::thread_rng()
+            .sample_iter(&rand::distributions::Alphanumeric)
+            .take(8)
+            .map(|b| (b as char).to_ascii_lowercase())
+            .collect();
+        let new_dir = workspace_dir.join(&random_name);
+        match fs::create_dir_all(&new_dir) {
+            Ok(_) => new_dir.display().to_string(),
+            Err(e) => {
+                msg_debug(&format!("[auto_workspace] chat_id={}, create_dir_all failed: {}", chat_id.0, e));
+                return None;
+            }
+        }
+    };
+    // Re-check under lock: another concurrent message may have already created a session
+    let (sid, path) = {
+        let mut data = state.lock().await;
+        if let Some(existing) = data.sessions.get(&chat_id).and_then(|s| s.current_path.clone()) {
+            msg_debug(&format!("[auto_workspace] chat_id={}, session already created by another message: {}", chat_id.0, existing));
+            let _ = fs::remove_dir(&auto_path);
+            let sid = data.sessions.get(&chat_id).and_then(|s| s.session_id.clone());
+            (sid, existing)
+        } else {
+            let session = data.sessions.entry(chat_id).or_insert_with(|| ChatSession {
+                session_id: None,
+                current_path: None,
+                history: Vec::new(),
+                pending_uploads: Vec::new(),
+            });
+            session.current_path = Some(auto_path.clone());
+            session.session_id = None;
+            session.history.clear();
+            data.settings.last_sessions.insert(chat_id.0.to_string(), auto_path.clone());
+            save_bot_settings(bot_token, &data.settings);
+            msg_debug(&format!("[auto_workspace] chat_id={}, new workspace session created: {}", chat_id.0, auto_path));
+            (None, auto_path)
+        }
+    };
+    let ts = chrono::Local::now().format("%H:%M:%S");
+    if sid.is_some() {
+        println!("  [{ts}] ▶ Using existing session: {path}");
+    } else {
+        println!("  [{ts}] ▶ Auto-started session: {path}");
+    }
+    Some((sid, path))
+}
+
 /// Telegram message length limit
 const TELEGRAM_MSG_LIMIT: usize = 4096;
 /// Maximum number of messages that can be queued per chat in queue mode
@@ -1777,7 +1854,9 @@ fn load_bot_settings(token: &str) -> BotSettings {
         .unwrap_or("")
         .to_string();
 
-    BotSettings { allowed_tools, last_sessions, owner_user_id, as_public_for_group_chat, models, debug, silent, direct, context, instructions, queue, username, display_name }
+    let greeting = entry.get("greeting").and_then(|v| v.as_bool()).unwrap_or(false);
+
+    BotSettings { allowed_tools, last_sessions, owner_user_id, as_public_for_group_chat, models, debug, silent, direct, context, instructions, queue, username, display_name, greeting }
 }
 
 /// Save bot settings to bot_settings.json
@@ -1818,6 +1897,7 @@ fn save_bot_settings(token: &str, settings: &BotSettings) {
         "queue": settings.queue,
         "username": settings.username,
         "display_name": settings.display_name,
+        "greeting": settings.greeting,
     });
     if let Some(owner_id) = settings.owner_user_id {
         entry["owner_user_id"] = serde_json::json!(owner_id);
@@ -2045,6 +2125,7 @@ pub async fn run_bot(token: &str) {
         teloxide::types::BotCommand::new("allowed", "Add/remove tool (+name / -name)"),
         teloxide::types::BotCommand::new("setpollingtime", "Set API polling interval (ms)"),
         teloxide::types::BotCommand::new("model", "Set AI model"),
+        teloxide::types::BotCommand::new("greeting", "Toggle compact startup greeting"),
         teloxide::types::BotCommand::new("debug", "Toggle debug logging"),
         teloxide::types::BotCommand::new("silent", "Toggle silent mode (hide tool calls)"),
         teloxide::types::BotCommand::new("direct", "Toggle direct mode (group only)"),
@@ -2094,11 +2175,20 @@ pub async fn run_bot(token: &str) {
             let last_path = data.settings.last_sessions.get(&cid.to_string())
                 .map(|p| p.as_str())
                 .unwrap_or("(unknown)");
-            let mut msg = format!("🟢 cokacdir started (v{})\n📂 Resuming session at {}\n💬 Join @cokacvibe for tips, updates, and community support\n⭐ Star us on GitHub: https://github.com/kstost/cokacdir", version, last_path);
-            if let Some(ref notice) = update_notice {
-                msg.push('\n');
-                msg.push_str(notice);
-            }
+            let model = get_model(&data.settings, chat_id);
+            let provider = detect_provider(model.as_deref());
+            let msg = if data.settings.greeting {
+                // Compact mode: single line with version and model
+                format!("🟢 cokacdir started (v{}, {})", version, provider)
+            } else {
+                // Full mode: marketing message with links
+                let mut m = format!("🟢 cokacdir started (v{}, {})\n📂 Resuming session at {}\n💬 Join @cokacvibe for tips, updates, and community support\n⭐ Star us on GitHub: https://github.com/kstost/cokacdir", version, provider, last_path);
+                if let Some(ref notice) = update_notice {
+                    m.push('\n');
+                    m.push_str(notice);
+                }
+                m
+            };
             let _ = tg!("send_message", bot.send_message(chat_id, msg).await);
         }
     }
@@ -2289,13 +2379,15 @@ async fn handle_message(
 
     let user_name = format!("{}({uid})", raw_user_name);
 
+    let has_file = msg.document().is_some() || msg.photo().is_some() || msg.video().is_some() || msg.voice().is_some() || msg.audio().is_some() || msg.animation().is_some() || msg.video_note().is_some();
+
     // Auto-restore session for file uploads (before text extraction)
-    if msg.document().is_some() || msg.photo().is_some() {
+    if has_file {
         auto_restore_session(&state, chat_id, &user_name).await;
     }
 
-    // Handle file/photo uploads
-    if msg.document().is_some() || msg.photo().is_some() {
+    // Handle file/photo/media uploads
+    if has_file {
         // In group chats (with prefix required), only process uploads whose caption starts with ';' or '@botname'
         if require_prefix {
             let caption = msg.caption().unwrap_or("");
@@ -2321,7 +2413,13 @@ async fn handle_message(
         } else {
             msg_debug(&format!("[handle_message] upload: require_prefix=false, caption={:?}", msg.caption()));
         }
-        let file_hint = if msg.document().is_some() { "document" } else { "photo" };
+        let file_hint = if msg.animation().is_some() { "animation" }
+            else if msg.document().is_some() { "document" }
+            else if msg.photo().is_some() { "photo" }
+            else if msg.video().is_some() { "video" }
+            else if msg.voice().is_some() { "voice" }
+            else if msg.audio().is_some() { "audio" }
+            else { "video_note" };
         println!("  [{timestamp}] ◀ [{user_name}] Upload: {file_hint}");
         handle_file_upload(&bot, chat_id, &msg, &state, &user_name).await?;
         println!("  [{timestamp}] ▶ [{user_name}] Upload complete");
@@ -2408,7 +2506,7 @@ async fn handle_message(
                                 .await)?;
                         }
                     } else {
-                        handle_text_message(&bot, chat_id, text, &state, &user_name).await?;
+                        handle_text_message(&bot, chat_id, text, &state, &user_name, false).await?;
                     }
                 }
             }
@@ -2786,6 +2884,10 @@ async fn handle_message(
         msg_debug("[handle_message] routing → /model");
         println!("  [{timestamp}] ◀ [{user_name}] /model {}", text.strip_prefix("/model").unwrap_or("").trim());
         handle_model_command(&bot, chat_id, &text, &state, token).await?;
+    } else if text.starts_with("/greeting") {
+        msg_debug("[handle_message] routing → /greeting");
+        println!("  [{timestamp}] ◀ [{user_name}] /greeting");
+        handle_greeting_command(&bot, chat_id, &state, token).await?;
     } else if text.starts_with("/debug") {
         msg_debug("[handle_message] routing → /debug");
         println!("  [{timestamp}] ◀ [{user_name}] /debug");
@@ -2815,7 +2917,7 @@ async fn handle_message(
         } else {
             msg_debug(&format!("[handle_message] routing → text_message (/query), body={:?}", truncate_str(body, 80)));
             println!("  [{timestamp}] ◀ [{user_name}] {body}");
-            handle_text_message(&bot, chat_id, body, &state, &user_name).await?;
+            handle_text_message(&bot, chat_id, body, &state, &user_name, false).await?;
         }
     } else if text.starts_with("/instruction_clear") {
         msg_debug("[handle_message] routing → /instruction_clear");
@@ -2852,11 +2954,11 @@ async fn handle_message(
         let preview = &stripped;
         msg_debug(&format!("[handle_message] routing → text_message (;prefix), stripped={:?}", truncate_str(&stripped, 80)));
         println!("  [{timestamp}] ◀ [{user_name}] {preview}");
-        handle_text_message(&bot, chat_id, &stripped, &state, &user_name).await?;
+        handle_text_message(&bot, chat_id, &stripped, &state, &user_name, false).await?;
     } else {
         msg_debug(&format!("[handle_message] routing → text_message (plain), require_prefix={}", require_prefix));
         println!("  [{timestamp}] ◀ [{user_name}] {preview}");
-        handle_text_message(&bot, chat_id, &text, &state, &user_name).await?;
+        handle_text_message(&bot, chat_id, &text, &state, &user_name, false).await?;
     }
 
     Ok(())
@@ -4744,35 +4846,77 @@ async fn handle_file_upload(
     state: &SharedState,
     user_display_name: &str,
 ) -> ResponseResult<()> {
-    msg_debug(&format!("[handle_upload] chat_id={}, has_doc={}, has_photo={}", chat_id.0, msg.document().is_some(), msg.photo().is_some()));
+    let upload_type = if msg.animation().is_some() { "animation" }
+        else if msg.document().is_some() { "document" }
+        else if msg.photo().is_some() { "photo" }
+        else if msg.video().is_some() { "video" }
+        else if msg.voice().is_some() { "voice" }
+        else if msg.audio().is_some() { "audio" }
+        else if msg.video_note().is_some() { "video_note" }
+        else { "unknown" };
+    msg_debug(&format!("[handle_upload] chat_id={}, type={}", chat_id.0, upload_type));
     // Get current session path
     let current_path = {
         let data = state.lock().await;
         data.sessions.get(&chat_id).and_then(|s| s.current_path.clone())
     };
 
-    let Some(save_dir) = current_path else {
-        shared_rate_limit_wait(state, chat_id).await;
-        tg!("send_message", bot.send_message(chat_id, "No active session. Use /start <path> first.")
-            .await)?;
-        return Ok(());
+    let save_dir = if let Some(path) = current_path {
+        path
+    } else {
+        // Auto-create a workspace session
+        let Some((_, path)) = auto_create_workspace_session(state, chat_id, bot.token()).await else {
+            shared_rate_limit_wait(state, chat_id).await;
+            tg!("send_message", bot.send_message(chat_id, "Failed to create workspace.")
+                .await)?;
+            return Ok(());
+        };
+        path
     };
 
-    // Get file_id and file_name
-    let (file_id, file_name) = if let Some(doc) = msg.document() {
+    // Get file_id, file_name, and file_size
+    // animation must precede document: Telegram sets both fields for GIFs
+    let (file_id, file_name, file_size_hint) = if let Some(anim) = msg.animation() {
+        let name = anim.file_name.clone().unwrap_or_else(|| format!("animation_{}.mp4", anim.file.unique_id));
+        (anim.file.id.clone(), name, anim.file.size)
+    } else if let Some(doc) = msg.document() {
         let name = doc.file_name.clone().unwrap_or_else(|| "uploaded_file".to_string());
-        (doc.file.id.clone(), name)
+        (doc.file.id.clone(), name, doc.file.size)
     } else if let Some(photos) = msg.photo() {
         // Get the largest photo
         if let Some(photo) = photos.last() {
             let name = format!("photo_{}.jpg", photo.file.unique_id);
-            (photo.file.id.clone(), name)
+            (photo.file.id.clone(), name, photo.file.size)
         } else {
             return Ok(());
         }
+    } else if let Some(video) = msg.video() {
+        let name = video.file_name.clone().unwrap_or_else(|| format!("video_{}.mp4", video.file.unique_id));
+        (video.file.id.clone(), name, video.file.size)
+    } else if let Some(voice) = msg.voice() {
+        let name = format!("voice_{}.ogg", voice.file.unique_id);
+        (voice.file.id.clone(), name, voice.file.size)
+    } else if let Some(audio) = msg.audio() {
+        let name = audio.file_name.clone().unwrap_or_else(|| format!("audio_{}.mp3", audio.file.unique_id));
+        (audio.file.id.clone(), name, audio.file.size)
+    } else if let Some(vn) = msg.video_note() {
+        let name = format!("videonote_{}.mp4", vn.file.unique_id);
+        (vn.file.id.clone(), name, vn.file.size)
     } else {
         return Ok(());
     };
+    msg_debug(&format!("[handle_upload] chat_id={}, file_name={}, file_size={}", chat_id.0, file_name, file_size_hint));
+
+    // Check file size (Telegram Bot API limit: 20MB for getFile)
+    const MAX_DOWNLOAD_SIZE: u32 = 20 * 1024 * 1024;
+    if file_size_hint > MAX_DOWNLOAD_SIZE {
+        let size_mb = file_size_hint as f64 / (1024.0 * 1024.0);
+        msg_debug(&format!("[handle_upload] chat_id={}, file rejected: size {:.1}MB exceeds 20MB limit", chat_id.0, size_mb));
+        shared_rate_limit_wait(state, chat_id).await;
+        tg!("send_message", bot.send_message(chat_id, &format!("File too large ({:.1}MB). Maximum size is 20MB.", size_mb))
+            .await)?;
+        return Ok(());
+    }
 
     // Download file from Telegram via HTTP
     shared_rate_limit_wait(state, chat_id).await;
@@ -4798,15 +4942,33 @@ async fn handle_file_upload(
     let safe_name = Path::new(&file_name)
         .file_name()
         .unwrap_or_else(|| std::ffi::OsStr::new("uploaded_file"));
-    let dest = Path::new(&save_dir).join(safe_name);
+    let mut dest = Path::new(&save_dir).join(safe_name);
+    // Avoid overwriting existing files (atomic create_new to eliminate TOCTOU race)
     let file_size = buf.len();
-    match fs::write(&dest, &buf) {
+    let stem = dest.file_stem().and_then(|s| s.to_str()).unwrap_or("uploaded_file").to_string();
+    let ext = dest.extension().and_then(|e| e.to_str()).map(|e| format!(".{}", e)).unwrap_or_default();
+    let mut counter = 0u32;
+    let write_result = loop {
+        use std::io::Write;
+        match fs::OpenOptions::new().write(true).create_new(true).open(&dest) {
+            Ok(mut f) => break f.write_all(&buf),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                counter += 1;
+                dest = Path::new(&save_dir).join(format!("{}({}){}", stem, counter, ext));
+                msg_debug(&format!("[handle_upload] chat_id={}, file exists, renamed to: {}", chat_id.0, dest.display()));
+            }
+            Err(e) => break Err(e),
+        }
+    };
+    match write_result {
         Ok(_) => {
+            msg_debug(&format!("[handle_upload] chat_id={}, saved: {} ({} bytes)", chat_id.0, dest.display(), file_size));
             let msg_text = format!("Saved: {}\n({} bytes)", dest.display(), file_size);
             shared_rate_limit_wait(state, chat_id).await;
             tg!("send_message", bot.send_message(chat_id, &msg_text).await)?;
         }
         Err(e) => {
+            msg_debug(&format!("[handle_upload] chat_id={}, save failed: {}", chat_id.0, e));
             shared_rate_limit_wait(state, chat_id).await;
             tg!("send_message", bot.send_message(chat_id, &format!("Failed to save file: {}", e)).await)?;
             return Ok(());
@@ -4878,6 +5040,14 @@ async fn handle_shell_command(
     let cancel_token = Arc::new(CancelToken::new());
     {
         let mut data = state.lock().await;
+        if data.cancel_tokens.contains_key(&chat_id) {
+            msg_debug(&format!("[handle_shell] chat_id={}, cancel_token exists (busy), rejecting", chat_id.0));
+            drop(data);
+            shared_rate_limit_wait(state, chat_id).await;
+            tg!("send_message", bot.send_message(chat_id, "AI request in progress. Use /stop to cancel.")
+                .await)?;
+            return Ok(());
+        }
         data.cancel_tokens.insert(chat_id, cancel_token.clone());
     }
 
@@ -5394,6 +5564,27 @@ async fn handle_setpollingtime_command(
     tg!("send_message", bot.send_message(chat_id, format!("✅ Polling time set to {}ms", value))
         .await)?;
 
+    Ok(())
+}
+
+/// Handle /greeting command - toggle compact startup greeting
+async fn handle_greeting_command(
+    bot: &Bot,
+    chat_id: ChatId,
+    state: &SharedState,
+    token: &str,
+) -> ResponseResult<()> {
+    let next = {
+        let mut data = state.lock().await;
+        let next = !data.settings.greeting;
+        data.settings.greeting = next;
+        save_bot_settings(token, &data.settings);
+        next
+    };
+    let status = if next { "compact" } else { "full" };
+    shared_rate_limit_wait(state, chat_id).await;
+    tg!("send_message", bot.send_message(chat_id, format!("🟢 Startup greeting: {status}"))
+        .await)?;
     Ok(())
 }
 
@@ -6001,6 +6192,11 @@ fn process_next_queued_message<'a>(
         msg_debug(&format!("[queue:next] chat_id={}, checking for next queued message", chat_id.0));
         let next_msg = {
             let mut data = state.lock().await;
+            // Skip if another task is already processing this chat
+            if data.cancel_tokens.contains_key(&chat_id) {
+                msg_debug(&format!("[queue:next] chat_id={}, cancel_token exists (another task active), skipping", chat_id.0));
+                return;
+            }
             let qkey = chat_id.0.to_string();
             let queue_enabled = data.settings.queue.get(&qkey).copied().unwrap_or(QUEUE_MODE_DEFAULT);
             if !queue_enabled {
@@ -6042,7 +6238,7 @@ fn process_next_queued_message<'a>(
             shared_rate_limit_wait(state, chat_id).await;
             let _ = tg!("send_message", bot.send_message(chat_id, &format!("Dequeued ({})", queued.id)).await);
 
-            if let Err(e) = handle_text_message(bot, chat_id, &queued.text, state, &queued.user_display_name).await {
+            if let Err(e) = handle_text_message(bot, chat_id, &queued.text, state, &queued.user_display_name, true).await {
                 msg_debug(&format!("[queue:next] chat_id={}, id={}, handle_text_message FAILED: {}", chat_id.0, queued.id, e));
             } else {
                 msg_debug(&format!("[queue:next] chat_id={}, id={}, handle_text_message completed OK", chat_id.0, queued.id));
@@ -6058,15 +6254,92 @@ async fn handle_text_message(
     user_text: &str,
     state: &SharedState,
     user_display_name: &str,
+    from_queue: bool,
 ) -> ResponseResult<()> {
-    msg_debug(&format!("[handle_text_message] START chat_id={}, user_text={:?}",
-        chat_id.0, truncate_str(user_text, 100)));
+    msg_debug(&format!("[handle_text_message] START chat_id={}, user_text={:?}, from_queue={}",
+        chat_id.0, truncate_str(user_text, 100), from_queue));
 
     // Register cancel token early (prevents duplicate requests while waiting for group lock)
     let cancel_token = Arc::new(CancelToken::new());
-    {
+    let busy_notify: Option<(bool, Option<String>)> = {
         let mut data = state.lock().await;
-        data.cancel_tokens.insert(chat_id, cancel_token.clone());
+        // For queued messages: check if placeholder was cancelled (e.g., /stop during dequeue window)
+        if from_queue {
+            let placeholder_cancelled = data.cancel_tokens.get(&chat_id)
+                .map(|t| t.cancelled.load(Ordering::Relaxed))
+                .unwrap_or(false);
+            if placeholder_cancelled {
+                msg_debug(&format!("[handle_text_message] chat_id={}, placeholder cancelled during dequeue", chat_id.0));
+                // Clean up pending_uploads restored for this cancelled message
+                if let Some(session) = data.sessions.get_mut(&chat_id) {
+                    if !session.pending_uploads.is_empty() {
+                        msg_debug(&format!("[handle_text_message] chat_id={}, clearing {} pending_uploads from cancelled dequeue", chat_id.0, session.pending_uploads.len()));
+                        session.pending_uploads.clear();
+                    }
+                }
+                data.cancel_tokens.remove(&chat_id);
+                // Clean up orphaned "Stopping..." message from /stop during dequeue window
+                let stop_msg = data.stop_message_ids.remove(&chat_id);
+                drop(data);
+                if let Some(msg_id) = stop_msg {
+                    shared_rate_limit_wait(state, chat_id).await;
+                    let _ = tg!("delete_message", bot.delete_message(chat_id, msg_id).await);
+                }
+                process_next_queued_message(bot, chat_id, state).await;
+                return Ok(());
+            }
+        }
+        // For non-queued messages: if another task is active, queue or notify
+        if !from_queue && data.cancel_tokens.contains_key(&chat_id) {
+            msg_debug(&format!("[handle_text_message] chat_id={}, cancel_token exists (busy)", chat_id.0));
+            let qkey = chat_id.0.to_string();
+            let qmode = data.settings.queue.get(&qkey).copied().unwrap_or(QUEUE_MODE_DEFAULT);
+            let qid = if qmode {
+                let cur_len = data.message_queues.get(&chat_id).map_or(0, |q| q.len());
+                if cur_len < MAX_QUEUE_SIZE {
+                    let uploads = data.sessions.get_mut(&chat_id)
+                        .map(|s| std::mem::take(&mut s.pending_uploads))
+                        .unwrap_or_default();
+                    let id = generate_queue_id();
+                    data.message_queues.entry(chat_id)
+                        .or_insert_with(std::collections::VecDeque::new)
+                        .push_back(QueuedMessage {
+                            id: id.clone(),
+                            text: user_text.to_string(),
+                            user_display_name: user_display_name.to_string(),
+                            pending_uploads: uploads,
+                        });
+                    msg_debug(&format!("[handle_text_message] chat_id={}, QUEUED id={}", chat_id.0, id));
+                    Some(id)
+                } else {
+                    msg_debug(&format!("[handle_text_message] chat_id={}, queue FULL", chat_id.0));
+                    None
+                }
+            } else {
+                None
+            };
+            Some((qmode, qid))
+        } else {
+            data.cancel_tokens.insert(chat_id, cancel_token.clone());
+            None
+        }
+    };
+    if let Some((queue_enabled, queued_id)) = busy_notify {
+        shared_rate_limit_wait(state, chat_id).await;
+        if queue_enabled {
+            if let Some(qid) = queued_id {
+                let preview = truncate_str(user_text, 30);
+                tg!("send_message", bot.send_message(chat_id, &format!("Queued ({qid}) \"{preview}\"\n- /stopall to cancel all\n- /stop_{qid} to cancel this"))
+                    .await)?;
+            } else {
+                tg!("send_message", bot.send_message(chat_id, &format!("Queue full (max {}). Use /stopall to clear.", MAX_QUEUE_SIZE))
+                    .await)?;
+            }
+        } else {
+            tg!("send_message", bot.send_message(chat_id, "AI request in progress. Use /stop to cancel.")
+                .await)?;
+        }
+        return Ok(());
     }
 
     // Acquire group chat lock (serializes processing across bots in the same group chat)
@@ -6110,19 +6383,20 @@ async fn handle_text_message(
     let (session_id, current_path) = match session_info {
         Some(info) => info,
         None => {
-            {
-                let mut data = state.lock().await;
-                data.cancel_tokens.remove(&chat_id);
-                // Clear queue — queued messages would also fail without a session
-                let cleared = data.message_queues.remove(&chat_id).map(|q| q.len()).unwrap_or(0);
-                if cleared > 0 {
-                    msg_debug(&format!("[queue:clear] chat_id={}, no session, cleared {} queued messages", chat_id.0, cleared));
+            // Auto-create a workspace session instead of rejecting the message
+            let Some((auto_sid, auto_current)) = auto_create_workspace_session(state, chat_id, bot.token()).await else {
+                {
+                    let mut data = state.lock().await;
+                    data.cancel_tokens.remove(&chat_id);
                 }
-            }
-            shared_rate_limit_wait(state, chat_id).await;
-            tg!("send_message", bot.send_message(chat_id, "No active session. Use /start <path> first.")
-                .await)?;
-            return Ok(());
+                shared_rate_limit_wait(state, chat_id).await;
+                let _ = tg!("send_message", bot.send_message(chat_id, "Failed to create workspace.")
+                    .await);
+                drop(group_lock);
+                process_next_queued_message(bot, chat_id, state).await;
+                return Ok(());
+            };
+            (auto_sid, auto_current)
         }
     };
 
@@ -8826,6 +9100,10 @@ async fn process_bot_message(
     let cancel_token = Arc::new(CancelToken::new());
     {
         let mut data = state.lock().await;
+        if data.cancel_tokens.contains_key(&chat_id) {
+            msg_debug(&format!("[process_bot_message] chat_id={}, cancel_token exists (busy), skipping id={}", chat_id.0, msg.id));
+            return;
+        }
         data.cancel_tokens.insert(chat_id, cancel_token.clone());
     }
 
