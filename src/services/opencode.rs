@@ -37,12 +37,6 @@ static OPENCODE_AVAILABLE: OnceLock<bool> = OnceLock::new();
 fn check_opencode_available() -> bool {
     opencode_debug("[check_opencode_available] START");
 
-    #[cfg(windows)]
-    {
-        opencode_debug("[check_opencode_available] disabled on Windows");
-        return false;
-    }
-
     if let Ok(val) = std::env::var("COKAC_OPENCODE_PATH") {
         if !val.is_empty() {
             opencode_debug(&format!("[check_opencode_available] found via COKAC_OPENCODE_PATH={}", val));
