@@ -1307,10 +1307,23 @@ impl serenity::all::EventHandler for DiscordHandler {
         };
 
         let has_attachment = document.is_some() || photo.is_some();
+        // Convert Discord mentions (<@ID>) to Telegram-style (@username)
         let text = if msg.content.is_empty() {
             None
         } else {
-            Some(msg.content.clone())
+            let mut content = msg.content.clone();
+            for mention in &msg.mentions {
+                let patterns = [
+                    format!("<@!{}>", mention.id),  // nickname mention
+                    format!("<@{}>", mention.id),    // regular mention
+                ];
+                for pat in &patterns {
+                    if content.contains(pat.as_str()) {
+                        content = content.replace(pat.as_str(), &format!("@{}", mention.name));
+                    }
+                }
+            }
+            Some(content)
         };
 
         // Guild name from cache (falls back to "Discord")

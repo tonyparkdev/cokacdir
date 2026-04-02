@@ -1413,6 +1413,7 @@ fn build_system_prompt(role: &str, current_path: &str, chat_id: i64, bot_key: &s
          All tools that require user interaction (such as AskUserQuestion, EnterPlanMode, ExitPlanMode) will NOT work. \
          Never use tools that expect user interaction. If you need clarification, just ask in plain text.\n\n\
          Response format: Use Markdown by default, but do NOT use Markdown tables.\n\n\
+         If the user asks about how to use cokacdir, refer to the documentation files in ~/.cokacdir/docs/ for accurate guidance.\n\n\
          ═══════════════════════════════════════\n\
          COKACDIR COMMAND REFERENCE\n\
          ═══════════════════════════════════════\n\

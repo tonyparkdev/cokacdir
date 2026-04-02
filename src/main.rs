@@ -820,6 +820,34 @@ fn normalize_consecutive_empty_lines(text: &str) -> String {
     result_lines.join("\n")
 }
 
+/// Deploy bundled documentation files to ~/.cokacdir/docs/
+fn deploy_docs() {
+    const DOCS: &[(&str, &str)] = &[
+        ("how-to-install.md", include_str!("../docs/how-to-install.md")),
+        ("how-to-update.md", include_str!("../docs/how-to-update.md")),
+        ("how-to-manage-tokens.md", include_str!("../docs/how-to-manage-tokens.md")),
+        ("how-to-setup-telegram-bot.md", include_str!("../docs/how-to-setup-telegram-bot.md")),
+        ("how-to-setup-discord-bot.md", include_str!("../docs/how-to-setup-discord-bot.md")),
+        ("how-to-start-first-chat.md", include_str!("../docs/how-to-start-first-chat.md")),
+        ("how-to-use-start-session-and-clear.md", include_str!("../docs/how-to-use-start-session-and-clear.md")),
+        ("how-to-set-instructions.md", include_str!("../docs/how-to-set-instructions.md")),
+        ("how-to-manage-requests.md", include_str!("../docs/how-to-manage-requests.md")),
+        ("how-to-use-group-chat.md", include_str!("../docs/how-to-use-group-chat.md")),
+        ("how-to-use-schedules.md", include_str!("../docs/how-to-use-schedules.md")),
+        ("how-to-simulate-multiple-chats-with-one-bot.md", include_str!("../docs/how-to-simulate-multiple-chats-with-one-bot.md")),
+        ("how-to-install-claude-code-on-windows.md", include_str!("../docs/how-to-install-claude-code-on-windows.md")),
+        ("how-to-install-codex-on-windows.md", include_str!("../docs/how-to-install-codex-on-windows.md")),
+    ];
+    if let Some(home) = dirs::home_dir() {
+        let docs_dir = home.join(".cokacdir").join("docs");
+        let _ = std::fs::create_dir_all(&docs_dir);
+        for (name, content) in DOCS {
+            let path = docs_dir.join(name);
+            let _ = std::fs::write(&path, content);
+        }
+    }
+}
+
 fn main() -> io::Result<()> {
     // Resolve binary path at startup (works on Linux, macOS, Windows)
     init_bin_path();
@@ -832,6 +860,9 @@ fn main() -> io::Result<()> {
         eprintln!("Error: Cannot determine home directory. ~/.cokacdir is required.");
         std::process::exit(1);
     }
+
+    // Deploy documentation to ~/.cokacdir/docs/
+    deploy_docs();
 
     // Handle command line arguments
     let args: Vec<String> = env::args().collect();
