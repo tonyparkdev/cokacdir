@@ -31,6 +31,33 @@ The same applies to commands. For example:
 @mybot /pwd    → only @mybot responds
 ```
 
+## /query — Alternative Message Syntax
+
+You can also use `/query` to send a message to the AI. This works like `;` but supports `@botname` targeting:
+
+```
+/query check the server status           → all bots receive
+/query@mybot check the server status     → only @mybot receives
+```
+
+This is useful when you want the message to be clearly structured as a command.
+
+---
+
+## /public — Controlling Access
+
+By default, only the bot owner can use the bot in group chats. Use `/public` to allow all group members to interact:
+
+```
+/public on      → all members can use the bot
+/public off     → owner only (default)
+/public         → show current setting
+```
+
+Only the bot owner can change this setting.
+
+---
+
 ## Bots Work Sequentially
 
 Bots in a group chat do not work simultaneously. They process messages one at a time in sequence. When one bot is busy, other messages wait in each bot's queue until it is their turn.
