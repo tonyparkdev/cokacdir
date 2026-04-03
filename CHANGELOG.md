@@ -1,6 +1,6 @@
 # Changelog — cokacdir
 
-## 0.4.80 — 2026-04-03
+## 0.4.81 — 2026-04-03
 
 - **Very long AI responses are now sent as a file attachment** instead of flooding the chat with many consecutive messages. Responses over ~8,000 characters are delivered as a downloadable `.txt` file.
 - This applies everywhere: normal responses, stopped/cancelled responses, scheduled tasks, and bot-to-bot messages.
